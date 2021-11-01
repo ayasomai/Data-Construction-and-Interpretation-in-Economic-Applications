@@ -1,0 +1,583 @@
+---
+title: "Assignment 4"
+author: "Aya Somai"
+date: "19/05/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, comment=NA, message=FALSE, warning=FALSE, fig.width=10, fig.height=10)
+```
+
+```{r, message=FALSE, warning=FALSE,echo=FALSE}
+library(sf)
+library(raster)
+library(dplyr)
+library(ggplot2)
+library(ggthemes)
+library(tidyr)
+#library(ggpubr)
+#library(coefplot)
+#library(ISLR)
+#library(glmnet)
+library(olsrr)
+library(caret)
+library(randomForest)
+library(ggmap)
+library(moments)
+library(arsenal)
+```
+
+
+```{r, echo=FALSE, warning=FALSE, include=FALSE}
+setwd("~/Desktop/Aya Somai - Desktop/ECON 21300 : Data Construction and Interpretation in Economic Applications/Assignment 4")
+train_data <- read.csv("houses_training_set.csv")
+train_data <- as.data.frame(train_data)
+train_df <- train_data
+```
+
+## Pre-analysis: Cleaning the training data
+### Eliminating erroneous and outlier values
+According to the question, approximately 1% of the training data contains errors (~145 observations). We try to identify and eliminate the erroneous observations. To begin with, we examine whether each column contains the range of values that are indicated in the data set criteria: 1) Single family homes in Madison, WI, 2) Sale price less than $300,000 and 3) Includes 2 or less bathrooms.
+
+We begin by plotting the distribution of sale prices for all homes prior to data cleaning:
+
+```{r, echo=FALSE, fig.height = 6, fig.width = 12}
+train_data %>% 
+  ggplot(aes(sale_price)) +
+  geom_histogram(alpha=0.75, color="grey", position = "identity")  +
+  xlab("Single Family Home Sale Price")
+```
+
+Our initial analysis shows that there are 73 observations with a negative value of sale price (*sale_price* < 0). We eliminate these observations from our training data and obtain the following distribution:
+
+```{r, echo=FALSE, include=FALSE}
+train_df <- train_df[train_df$sale_price > 0, ]
+train_df <- train_df %>% drop_na(sale_price)
+```
+
+```{r, echo=FALSE, fig.height = 6, fig.width = 12}
+train_df %>% 
+  ggplot(aes(sale_price)) +
+  geom_histogram(alpha=0.75, color="grey", position = "identity") +
+  xlab("Single Family Home Sale Price")
+```
+
+The distribution of the sale price shows outlier values of homes that were sold for \$2600. We eliminate these observations as well from our training data. We obtain a distribution with mean \$167643.2 (SD= \$48078.55) and median \$163000.0. The distribution is positively skewed to the right (Skewness = 0.4166046 and Kurtosis = 2.852312). The tails are flatter than a Normal distribution, i.e. it produces less extreme outlier values (Kurtosis = 2.852312). We use the boxplots to visualize the inter-quantile range (IQR= \$63000):
+
+```{r, echo=FALSE, include=FALSE}
+train_df <- train_df[train_df$sale_price!=2600, ]
+```
+
+```{r, echo=FALSE, fig.height = 6, fig.width = 12}
+train_df %>% 
+  ggplot(aes(sale_price)) +
+  geom_histogram(alpha=0.75, color="grey", position = "identity") +
+  xlab("Single Family Home Sale Price")
+
+mean(train_df$sale_price)
+sd(train_df$sale_price)
+median(train_df$sale_price)
+IQR(train_df$sale_price)
+```
+
+```{r, echo=FALSE, fig.height = 6, fig.width = 12}
+train_df %>% 
+  ggplot(aes(sale_price)) +
+  geom_boxplot() +
+  xlab("Single Family Home Sale Price")
+```
+
+We repeat this process with third criteria of our training data set: the number of full bathrooms. Our analysis indicates that there are 25 observations with negative values for *total_full_bath*. There are no observations with more than two full bathrooms. Moreover, there are another 25 observations with negative values for *t2nd_floor_area*. We eliminate these observations from the training data set. 
+In total, we obtain 14323 in our cleaned data set, after eliminating a total of 177 observations (~ 1.22% of observations).
+
+```{r, echo=FALSE, include=FALSE}
+train_df <- train_df[train_df$total_full_bath>=0, ]
+train_df <- train_df[train_df$t2nd_floor_area>=0, ]
+```
+
+### Standardizing categorical and binary variables
+On another note, I notice that some binary variables (e.g. *deed_restriction*, *national_historic_district*, *urban_design_district*, *flood_plain*,  *street_noise* and *fuel_storage_proximity*) are not standardized. I recode these columns to a dummy variable (i.e. equals either 0 or 1) in order to include them in the regression analysis.
+
+```{r, echo=FALSE, include=FALSE}
+train_df$deed_restrictions<-ifelse(train_df$deed_restrictions=="yes",1,0)
+train_df$national_historic_district<-ifelse(train_df$national_historic_district=="no",0,1)
+train_df$urban_design_district<-ifelse(train_df$urban_design_district=="yes",1,0)
+train_df$flood_plain<-ifelse(train_df$flood_plain=="yes",1,0)
+train_df$street_noise<-ifelse(train_df$street_noise=="61",1,0)
+train_df$fuel_storage_proximity<-ifelse(train_df$fuel_storage_proximity=="no",0,1)
+```
+
+In addition, some categorical variables are not factorized in the data set (e.g. the style of the home, the types of ceiling/siding/floor/driveway/lot/water frontage, the class of amperage and plumbing systems, etc.). I recode these categorical variables into factors in order to include them in the regression analysis.
+
+```{r, echo=FALSE, include=FALSE}
+train_df <- train_df[!is.na(train_df$sale_price),]
+
+train_df$style <- factor(train_df$style)
+train_df$elementary_school_number <- factor(train_df$elementary_school_number)
+train_df$middle_school_number <- factor(train_df$middle_school_number)
+train_df$high_school_number <- factor(train_df$high_school_number)
+train_df$amp_rating <- factor(train_df$amp_rating)
+train_df$plumbing_class <- factor(train_df$plumbing_class)
+train_df$ceiling_types_1_and_2 <- factor(train_df$ceiling_types_1_and_2)
+train_df$siding_types_1_and_2 <- factor(train_df$siding_types_1_and_2)
+train_df$floor_types_1_and_2 <- factor(train_df$floor_types_1_and_2)
+train_df$driveway_type <- factor(train_df$driveway_type)
+train_df$lot_type_1 <- factor(train_df$lot_type_1)
+train_df$lot_type_2 <- factor(train_df$lot_type_2)
+train_df$type_of_water_frontage <- factor(train_df$type_of_water_frontage)
+```
+
+### Adding independent variables
+Lastly, I add a column *age* to calculate the number of years between the date the home has been constructed and the date of sale^[I transformed the column *sale_date* to a date format and extracted the year of purchase. Note: There were 37 observations with missing data of sale values.]. The mean age of a single family home is 36.14 years (SD= 26.98 years). The oldest home sold was 153 years old. Moreover, there were 1421 homes that were sold the same year they were constructed.
+
+```{r, echo=FALSE, include=FALSE}
+train_df$sale_date <- format(as.Date(train_df$sale_date, format="%d/%m/%Y"),"%Y")
+train_df$sale_date <- as.integer(train_df$sale_date) 
+train_df$age <- train_df$sale_date - train_df$construction_yr
+train_df <- train_df[!is.na(train_df$age),]
+```
+
+On a side note, I tried to use the geocoding package to visualize the locations of the houses in Madison's Dane county using the data on the longitudinal (*dane_long*) and latitudinal coordinates (*dane_lat*). However, this data seemed to be inaccurate since the county's center is approximately located at a longitude of -89.401230 and a latitude of 43.073051. I added two columns whereby I mutated the existent data into the corresponding coordinates.^[By dividing each data point by 10000 and changing longitude data from positive to negative].
+
+```{r, echo=FALSE, include=FALSE}
+#map1 <- qmplot(train_df$long, train_df$lat, data = train_df, colour = I('red'), size = I(3), darken = .3)
+
+#train_df$lat <- train_df$Dane_long/10000
+#train_df$long <- train_df$Dane_lat/-10000
+
+#p <- ggmap(get_googlemap(center = c(lon = -89.401230, lat = 43.073051),
+#                    zoom = 10, scale = 2,
+#                    maptype ='terrain',
+#                    color = 'color'))
+
+#p + geom_point(aes(x = train_df$long, y = train_df$lat,  colour = "blue", data = train_df, size = 0.5, alpha=0.5)) + 
+#        theme(legend.position="bottom")
+```
+
+## Question 1: Building an OLS model
+
+### Selecting the independent variables
+The training data contains multiple variables that determine the characteristics of each house, and thus may be associated with the sale price. The variables range from qualitative (e.g. style, quality class, etc.) and quantitative (e.g. number of full/half bathrooms, number of fireplace openings, etc.). The variables also include characteristics of the neighborhood (e.g. national historic district, urban design district, etc.), the surrounding environment (e.g. traffic noise, flood plain, etc.) as well as the district (e.g. elementary/middle/high school district, etc.)
+
+Generally, home buyers in this particular bracket determine the value of the house based on four important features: 1) The square footage available in the main usable spaces (i.e. ground floor, second floor, garage, etc.), 2) The quality and condition of appliances (e.g. kitchen, laundry facilities), 3) Energy consumption and maintenance efficiency (e.g. heating, air conditioning, etc.), and 4) Neighborhood comparables (e.g. school district, proximity to shopping areas, crime rate, etc.). Usually, other economic indicators such as the employment rate in the area, the rezoning plans and expected movement of people in/out of the area can also be a major factor in the pricing of single family homes.
+
+I start by running the regression with all variables, and then re-running the regression while eliminating those variables that do not seem to be statistically significant and/or affect sale prices substantially (See Appendix 1 for summary of regression). I repeat the process variable-by-variable until we can no longer improve the model fitting criteria such as the largest R-squared value or the smallest Mean Squared Errors (MSE).
+
+Note: Some variables have entries that are uniformly the same for each observations. We eliminate these variables from the regression analysis (e.g. *above_3rd_floor_area*, *dewlling_units*, *urban_design_district*, etc.)
+
+```{r, echo=FALSE, include=FALSE}
+model0 <- lm(sale_price ~. , data = train_df)
+summary(model0)
+```
+
+The initial regression outputs an R-squared value of 0.8032 and an adjusted R-squared value of 0.8005. However, these model fitting criteria can be misleading due to the complexity of the regression analysis and the inclusion of more variables than may be needed. Specifically, I want to avoid the issue of overfitting the data, i.e. outputting a model that fits the data too well by containing more variables than what the data justifies. Overfitting can lead to a model that describes the random error (i.e. noise) rather than the relationship between the variables (i.e. signal). As a result, the model outputs misleading R-squared values, regression coefficients and statistical significance values (e.g. t-statistics and p-values). This would be an issue if we try to predict out-of-sample data.
+
+```{r, echo=FALSE, include=FALSE}
+test1_df_sub = subset(train_df, select = -c(X, parcel_number, assessment_area, above_3rd_floor_area, dwelling_units, urban_design_district))
+test1_df_sub <- sapply(test1_df_sub, as.numeric )
+res <- cor(test1_df_sub)
+round(res, 2)
+col<- colorRampPalette(c("blue", "white", "red"))(20)
+```
+
+```{r, echo=FALSE, include=TRUE}
+heatmap(x = res, col = col, symm = TRUE)
+```
+
+These two methods (quantitative and visual) show that there are some variables that are more valuable than others in predicting sale prices. I classify them from most important to least important in the following way:
+
+* Most valuable variables: *style, quality_class, story_height, ground_floor_area, t2nd_floor_area, total_full_bath, total_half_bath, plumbing_class, amp_rating, fireplace_openings, stalls_garage_1, elementary_school_number, middle_school_number, high_school_number, age, Dane_long, Dane_lat*.
+
+* Average valuable: *total_dining, floor_types_1_and_2, siding_types_1_and_2, ceiling_types_1_and_2, foundation, central_air, driveway_type, street_noise, airport_noise, national_historic_district, lot_type_1, traffic, wooded, curb and gutter, topography_1, lot_size, total_family*
+
+* Least variable variables: *lot size, outside_condition, inside_condition, finished_attic_area, additions_area, t3rd_floor_area, finished_basement_area, total_kitchens, total_other, total_living, roof, windows, stalls_garage_2, deed_restrictions, flood_plain, lot_type_2, fuel_storage_proximity, type_of_water_frontage, street, sewer, water, gas, alley, sidewalk, landscaping, topography_2, parcel_view, total_dens, external_influence, railroad_noise*.
+
+Now, I re-run the regression with the variables selected and obtain the following results (See Appendix 2 for details). We now try to evaluate how well the model fits the data by plotting the predicted values vs. true values in the training set. I split the data into training data and validation data in order to evaluate their fit and performance. We evaluate the regression model accuracy and obtain a Mean Absolute Error (MAE) of 25430.1, a Root Mean Squared Error (RMSE) of 32942.3 and R-squared value of 0.5304:
+
+```{r, echo=FALSE, include=FALSE}
+model1 <- lm(sale_price ~ quality_class + style + story_height +
+               ground_floor_area + t2nd_floor_area + total_full_bath + total_half_bath + fireplace_openings +
+               plumbing_class + amp_rating + stalls_garage_1 + 
+               elementary_school_number + middle_school_number + high_school_number + age + Dane_long + Dane_lat
+              , data = train_df)
+#summary(model1)
+#k <- ols_step_all_possible(model1)
+#k
+#l <- ols_step_best_subset(model1)
+#plot(k)
+#l
+```
+
+```{r, echo=FALSE, include=TRUE, fig.height = 5, fig.width = 5}
+pred0 <- predict(model1)
+plot0 <- plot(pred0, train_df$sale_price) + abline(c(0,1),col=2)
+plot0
+MAE(pred0, train_df$sale_price)
+#MSE(pred0, train_df$sale_price)
+RMSE(pred0, train_df$sale_price)
+R2(pred0, train_df$sale_price, form = "traditional")
+```
+
+### Predicting the sale price of the first test set
+Using the previous OLS, we predict the sale price of the houses in the testing data set (1734 observations). We obtain a range of values between \$67774.41 and \$274937.24, which corresponds to the bracket of houses we are initially interested in exploring. The following plot demonstrates the distribution of house sale prices as well as the summary statistics in the testing data set:
+ 
+```{r, echo=FALSE, include=FALSE}
+test1_data <- read.csv("houses_test_set_1_new.csv")
+test1_data <- as.data.frame(test1_data)
+test1_df <- test1_data
+test1_df = subset(test1_df, select = -c(X1) )
+```
+
+```{r, echo=FALSE, include=FALSE}
+test1_df$deed_restrictions<-ifelse(test1_df$deed_restrictions=="yes",1,0)
+test1_df$national_historic_district<-ifelse(test1_df$national_historic_district=="no",0,1)
+test1_df$urban_design_district<-ifelse(test1_df$urban_design_district=="yes",1,0)
+test1_df$flood_plain<-ifelse(test1_df$flood_plain=="yes",1,0)
+test1_df$street_noise<-ifelse(test1_df$street_noise=="61",1,0)
+test1_df$fuel_storage_proximity<-ifelse(test1_df$fuel_storage_proximity=="no",0,1)
+
+test1_df$style <- factor(test1_df$style)
+test1_df$elementary_school_number <- factor(test1_df$elementary_school_number)
+test1_df$middle_school_number <- factor(test1_df$middle_school_number)
+test1_df$high_school_number <- factor(test1_df$high_school_number)
+test1_df$amp_rating <- factor(test1_df$amp_rating)
+test1_df$plumbing_class <- factor(test1_df$plumbing_class)
+test1_df$ceiling_types_1_and_2 <- factor(test1_df$ceiling_types_1_and_2)
+test1_df$siding_types_1_and_2 <- factor(test1_df$siding_types_1_and_2)
+test1_df$floor_types_1_and_2 <- factor(test1_df$floor_types_1_and_2)
+test1_df$driveway_type <- factor(test1_df$driveway_type)
+test1_df$lot_type_1 <- factor(test1_df$lot_type_1)
+test1_df$lot_type_2 <- factor(test1_df$lot_type_2)
+test1_df$type_of_water_frontage <- factor(test1_df$type_of_water_frontage)
+
+test1_df$stalls_garage_2 <- as.numeric(test1_df$stalls_garage_2)
+
+test1_df$amp_rating[test1_df$amp_rating == 201] <- 200
+test1_df$amp_rating <- droplevels(test1_df$amp_rating)
+
+#test1_df$lat <- test1_df$Dane_long/10000
+#test1_df$long <- test1_df$Dane_lat/-10000
+```
+
+```{r, echo=FALSE, include=FALSE}
+test1_df$sale_date <- format(as.Date(test1_df$sale_date, format="%d/%m/%Y"),"%Y")
+test1_df$sale_date <- as.integer(test1_df$sale_date) 
+test1_df$age <- test1_df$sale_date - test1_df$construction_yr
+```
+
+```{r, echo=FALSE, include=FALSE}
+pred1 <- predict(model1, test1_df, type="response")
+```
+
+```{r, echo=FALSE, include=TRUE}
+ols_results <-
+  test1_df %>% 
+  select(X, parcel_number, sale_date)
+
+ols_results$sale_price <- pred1
+ols_results$question <- "question_1"
+range(ols_results$sale_price)
+
+write.csv(ols_results ,"part1.csv", row.names = TRUE)
+```
+
+```{r, echo=FALSE, fig.height = 6, fig.width = 12}
+ols_results %>% 
+  ggplot(aes(sale_price)) +
+  geom_histogram(alpha=0.75, color="grey", position = "identity") 
+
+mean(ols_results$sale_price)
+sd(ols_results$sale_price)
+median(ols_results$sale_price)
+IQR(ols_results$sale_price)
+```
+We obtain a distribution with mean \$167111.8 (SD= \$34818.51) and median \$165963.4. The distribution is positively skewed to the right (Skewness = 0.2226335 and Kurtosis = 2.852312). The tails are flatter than a Normal distribution, i.e. it produces less extreme outlier values (Kurtosis = 2.549902). We use the boxplots to visualize the inter-quantile range (IQR= \$50602.09):
+
+
+```{r, echo=FALSE, fig.height = 6, fig.width = 12}
+ols_results %>%
+  ggplot(aes(y = sale_price)) +
+  geom_boxplot() +
+  coord_flip() +
+  ylab("Single Family Home Sale Price")
+```
+
+## Question 2: Building a Random Forest model for Similar Out-of-sample Data
+We now divert our attention to the Random Forest statistical model. The Random Forest constructs a specified number of decision trees and outputs an average prediction of regression coefficients from each individual tree. In a way, the Random Forest model is a combination of bootstrapping and decision trees. The randomization of the tree building process can reduce the variance of predictions from a single tree, hence increase its predictive performance.^[Random Forests, *UC Business Analytics R Programming Guide* available at https://uc-r.github.io/random_forests]
+
+Note: I noticed there are missing values for some observations. As such, I used the algorithm rfImpute which eliminates missing values before calling the randomForest algorithm. The imputed values are approximated as a weighted-average (for continuous variables) or the largest average (for categorical variables).
+
+### Selecting the independent variables
+I start by running the random forest model using all variables^[This does not include some variables such as *parcel number*, *above_3rd_floor_area*, *dwelling_units*, and *urban_design_district*.]. Again, this method is not efficient and may lead to the problem of overfitting. However, we use this initial random forest to evaluate variable importance. This can help us reaffirm the variable selection from the OLS model.
+
+```{r, echo=FALSE, include=TRUE}
+rf_model0 <- randomForest(sale_price~. - X - parcel_number - sale_date - assessment_area 
+                     - construction_yr - effective_yr - shape_length - shape_area - Dane_long - Dane_lat, 
+                     data = train_df, mtry = 4, importance = TRUE, ntree=50, na.action = na.omit)
+print(rf_model0)
+```
+
+In order to determine the importance of variables, I use the out-of-bag (OOB) error which is a common method to measure the prediction error of random forests when using the original data set. Simply put, OOB randomly selects independent variables to permute, generates predicted outcome, then calculates the prediction error in the new sample. We obtain the following results:
+
+```{r, echo=FALSE, include=TRUE}
+varImpPlot(rf_model0)
+```
+
+The plots show two variable importance measures: the increased Mean Squared Errors (%IncMSE) and the Increased Node Purity (IncNodePurity). The former shows how omitting a certain variable changes the predictive power of the random forest my increasing the MSE. The later measures the homogeneity or the "purity" of the data set when splitting the trees over a certain variable by decreasing its Sum of Squared Errors (SSE). 
+
+I select the variables that increase MSE by 8% or more and node purity by 1.0e+12 or more. The results confirm our variable selection from the previous questions. In fact the following variables seem to be more important than others: *ground_floor_area*, *t2nd_floor_area*, *age*, *elementary_school_number*, *middle_school_number*, *high_school_number*, *Dane_long*, *Dane_lat*, *plumbing_class*, *amp_rating*, *lot_size*, *fireplace_openings*, *total_full_bath*, *quality_class*, *story_height*, and *style*.
+
+It is interesting to note that the elementary school (rather than middle and high school) is consistently a major predictive value of house prices. This may be because families in this economic bracket (smaller and less expensive houses) are younger (e.g. early-career parents with children). Moreover, house buyers in this bracket put more value on the ground floor and second floor areas but not other areas (basement, third floor, attic, etc.). Some other characteristics such as the plumbing quality, the amperage rating and fireplace openings - though not directly obvious as an important characteristic for home buyers - make sense since plumbing, electricity and heating are the three main factors that determine utilities cost. On the other hand, other characteristics such as the sewage, water and air conditioning systems did not have an important predictive power. This may be explained by a regional standardization and lower costs for the sewage and water systems as well as by environmental factors. For instance, buyers in Madison, WI are more concerned about low temperatures during the winter (i.e. heating) than high temperatures during the summer (i.e. air conditioning).
+
+### Predicting the sale price of the first test set
+We re-run the random forest with the selected variables in order to increase precision and avoid overfitting. We obtain the following results:
+
+```{r, echo=FALSE, include=TRUE}
+rf_model1 <- randomForest(sale_price ~ quality_class + style + story_height + age +
+               ground_floor_area + t2nd_floor_area + total_full_bath + total_family +
+                 fireplace_openings + lot_size +
+               plumbing_class + amp_rating + 
+               elementary_school_number + middle_school_number + high_school_number +
+                 Dane_long + Dane_lat + finished_basement_area + floor_types_1_and_2,
+               data = train_df, mtry = 4, importance = TRUE, ntree=100)
+print(rf_model1)
+```
+We now try to evaluate how well the model fits the data by plotting the predicted values vs. true values in the training set. I split the data into training data and validation data in order to evaluate their fit and performance. We evaluate the regression model accuracy and obtain a Mean Absolute Error (MAE) of 24247.03, a Root Mean Squared Error (RMSE) of 31442.14 and R-squared value of 0.5722:
+
+```{r, echo=FALSE, include=TRUE, fig.height = 5, fig.width = 5}
+pred1 <- predict(rf_model1)
+plot1 <- plot(pred1, train_df$sale_price) + abline(c(0,1),col=2)
+plot1
+MAE(pred1, train_df$sale_price)
+#MSE(pred0, train_df$sale_price)
+RMSE(pred1, train_df$sale_price)
+R2(pred1, train_df$sale_price, form = "traditional")
+```
+
+```{r, echo=FALSE, include=FALSE}
+levels(test1_df$amp_rating) <- levels(train_df$amp_rating)
+levels(test1_df$quality_class) <- levels(train_df$quality_class)
+levels(test1_df$style) <- levels(train_df$style)
+levels(test1_df$story_height) <- levels(train_df$story_height)
+levels(test1_df$ground_floor_area) <- levels(train_df$ground_floor_area)
+levels(test1_df$t2nd_floor_area) <- levels(train_df$t2nd_floor_area)
+levels(test1_df$total_full_bath) <- levels(train_df$total_full_bath)
+levels(test1_df$fireplace_openings) <- levels(train_df$fireplace_openings)
+levels(test1_df$lot_size) <- levels(train_df$lot_size)
+levels(test1_df$plumbing_class) <- levels(train_df$plumbing_class)
+levels(test1_df$amp_rating) <- levels(train_df$amp_rating)
+levels(test1_df$plumbing_class) <- levels(train_df$plumbing_class)
+levels(test1_df$elementary_school_number) <- levels(train_df$elementary_school_number)
+levels(test1_df$middle_school_number) <- levels(train_df$middle_school_number)
+levels(test1_df$high_school_number) <- levels(train_df$high_school_number)
+levels(test1_df$total_family) <- levels(train_df$total_family)
+levels(test1_df$floor_types_1_and_2) <- levels(train_df$floor_types_1_and_2)
+levels(test1_df$finished_basement_area) <- levels(train_df$finished_basement_area)
+levels(test1_df$Dane_long) <- levels(train_df$Dane_long)
+levels(test1_df$Dane_lat) <- levels(train_df$Dane_lat)
+
+pred2 <- predict(rf_model1, test1_df, type="response", proximity=FALSE)
+```
+
+Using this random forest, we predict the sale price of the houses in the testing data set (1734 observations). We obtain a range of values between \$79569.74 and \$247525.17, which corresponds to the bracket of houses we are initially interested in exploring. The following plot demonstrates the distribution of house sale prices as well as the summary statistics in the testing data set:
+
+```{r, echo=FALSE, include=TRUE}
+rf_results <-
+  test1_df %>%
+  select(X, parcel_number, sale_date)
+rf_results$sale_price <- pred2
+rf_results$question <- "question_2"
+```
+
+```{r, echo=FALSE, fig.height = 6, fig.width = 12}
+rf_results %>% 
+  ggplot(aes(sale_price)) +
+  geom_histogram(alpha=0.75, color="grey", position = "identity") 
+
+mean(rf_results$sale_price)
+sd(rf_results$sale_price)
+median(rf_results$sale_price)
+IQR(rf_results$sale_price)
+
+write.csv(rf_results ,"par2.csv", row.names = TRUE)
+```
+
+We obtain a distribution with mean \$165936.8 (SD= \$27775.93) and median \$164669.1. The distribution is positively skewed to the right (Skewness = 0.2707424 and Kurtosis = 2.77106). We use the boxplots to visualize the inter-quantile range (IQR= \$36834.75):
+
+```{r, echo=FALSE, fig.height = 6, fig.width = 12}
+rf_results %>%
+  ggplot(aes(y = sale_price)) +
+  geom_boxplot() +
+  coord_flip() +
+  ylab("Single Family Home Sale Price")
+```
+
+## Question 3: Building a Random Forest model for Different Out-of-sample Data
+The second houses test set contains single family homes in the same area (Madison's Dane County) that were sold for over $300,000 or had more than two full bathrooms. In other words, these houses can be classified in a different economic bracket whereby the buyer deemed some characteristics more important (e.g. larger lot size, more bedrooms, higher-quality appliances, etc.).
+
+```{r, echo=FALSE, include=FALSE}
+test2_data <- read.csv("houses_test_set_2_new.csv")
+test2_data <- as.data.frame(test2_data)
+test2_df <- test2_data
+test2_df = subset(test2_df, select = -c(X1) )
+```
+
+```{r, echo=FALSE, include=FALSE}
+test2_df$deed_restrictions<-ifelse(test2_df$deed_restrictions=="yes",1,0)
+test2_df$national_historic_district<-ifelse(test2_df$national_historic_district=="no",0,1)
+test2_df$urban_design_district<-ifelse(test2_df$urban_design_district=="yes",1,0)
+test2_df$flood_plain<-ifelse(test2_df$flood_plain=="yes",1,0)
+test2_df$street_noise<-ifelse(test2_df$street_noise=="61",1,0)
+test2_df$fuel_storage_proximity<-ifelse(test2_df$fuel_storage_proximity=="no",0,1)
+
+test2_df$style <- factor(test2_df$style)
+test2_df$elementary_school_number <- factor(test2_df$elementary_school_number)
+test2_df$middle_school_number <- factor(test2_df$middle_school_number)
+test2_df$high_school_number <- factor(test2_df$high_school_number)
+test2_df$amp_rating <- factor(test2_df$amp_rating)
+test2_df$plumbing_class <- factor(test2_df$plumbing_class)
+test2_df$ceiling_types_1_and_2 <- factor(test2_df$ceiling_types_1_and_2)
+test2_df$siding_types_1_and_2 <- factor(test2_df$siding_types_1_and_2)
+test2_df$floor_types_1_and_2 <- factor(test2_df$floor_types_1_and_2)
+test2_df$driveway_type <- factor(test2_df$driveway_type)
+test2_df$lot_type_1 <- factor(test2_df$lot_type_1)
+test2_df$lot_type_2 <- factor(test2_df$lot_type_2)
+test2_df$type_of_water_frontage <- factor(test2_df$type_of_water_frontage)
+
+test2_df$stalls_garage_2 <- as.numeric(test2_df$stalls_garage_2)
+
+test2_df$amp_rating[test2_df$amp_rating == 201] <- 200
+test2_df$amp_rating <- droplevels(test2_df$amp_rating)
+```
+
+```{r, echo=FALSE, include=FALSE}
+test2_df$sale_date <- format(as.Date(test2_df$sale_date, format="%d/%m/%Y"),"%Y")
+test2_df$sale_date <- as.integer(test2_df$sale_date)
+test2_df$age <- test2_df$sale_date - test2_df$construction_yr
+```
+
+### Exploring the second testing set
+I start by exploring how the second test set differs from the training set. The second test set has 3125 observations. We start by looking at the distribution of the number of bathrooms. The second testing set has proportionally more houses with 3 bathrooms and proportionally less houses with only 1 bathroom. The training set (as well as the first testing set) have an equal proportion of either 1 or 2 bathrooms. As such, we will filter the training set data to include only houses with two bathrooms.
+
+```{r, echo=FALSE, include=TRUE, fig.width=3, fig.height=3}
+ggp1 <- ggplot(NULL, aes(x= total_full_bath)) +    
+  geom_bar(data = test2_df, fill = "#00AFBB", alpha=0.4) +
+  geom_bar(data = test1_df, fill = "#E7B800", alpha=0.4) +
+  xlab("Total number of bathrooms")
+
+ggp1
+```
+
+Looking at the square footage of the houses, I notice that some observations have outlier values as shown in the following boxplot. More specifically, there were 79 observations (~ 2.5%) in *lot_size* that were above the upper bound of 27872.7 sqrft. In terms of space, 80 houses included 3rd floor areas (only 6 houses in the first training set). Moreover, 11 houses in the second training set included additional spaces (only 33 in the first training set). Similar to the first two data sets, the houses in the second training set did not include areas above the 3rd floor.
+
+```{r, echo=FALSE, include=TRUE, fig.width=6, fig.height=6}
+ggp2 <- ggplot(NULL, aes(x= lot_size)) +    
+  geom_histogram(data = test2_df, fill = "#00AFBB", alpha=0.25) +
+  xlab("Total lot size (in square feet)")
+ggp2
+
+lower_bound <- quantile(test2_df$lot_size, 0.025)
+lower_bound
+upper_bound <- quantile(test2_df$lot_size, 0.975)
+upper_bound
+```
+
+On the other hand, the second testing set included 337 observations (~10.8%) that were in a national historic district. Moreover, 6 observations included a deed restriction, i.e. a limitation on how the buyer can use the property. None of the houses sold in this bracket were in an urban design district.
+
+Lastly, in comparing the location of the homes using the longitudinal and latitudinal coordinates, there is a clear distribution of more expensive homes in the second training set in areas that are different from less expensive homes in the training set. As such, I will filter the data to include homes in the areas where the more expensive homes are concentrated. This may also help us take into consideration other factors we may not be able to fully account for (e.g. the quality of school district, the environmental conditions of the neighborhood, etc.).
+
+```{r, echo=FALSE, include=TRUE, fig.width=6, fig.height=6}
+ggp3 <- ggplot(NULL, aes(x= Dane_lat, y=Dane_long)) +    
+  geom_point(data = test2_df, col = "#00AFBB", alpha=0.4) +
+  geom_point(data = test1_df, col = "#E7B800", alpha=0.4) +
+  xlab("Latitudinal coordinates") +
+  ylab("Longitudinal coordinates")
+
+ggp3
+```
+
+### Selecting the independent variables
+For this subset of training data which takes into consideration the differences between the training and testing data sets, I utilize the same OLS regression approach from the first question to identify the best-fit model. As a reminder, I start by running the regression with the variables I deem important in determining the sale price of houses that are more expensive or have a larger number of bathrooms. I then re-run the regression while adding those variables that seem to affect sale prices substantially in this subset (See Appendix 3 for summary of regression). I repeat the process variable-by-variable until we can no longer improve the model fitting criteria such as the largest R-squared value or the smallest Mean Squared Errors (MSE).
+
+My theory is that home buyers that are willing to spend more than $300,000 on a single family home prioritize larger space (i.e. *lot_size*, *ground_floor_area*, *t2nd_floor_area*) as well as a higher number of usable spaces. I also hypothesize that these families would expect higher-quality amenities (*central_air*, *landscaping*, *wooded*) and improved conditions (*quality_class*, *style*). Similarly to the previous data, I would still hold the assumption that these families choose their household placement based on school districts from elementary, middle and high school. At the same time, the marginal benefit/loss of some house characteristics may not be the same. For instance, home buyers in this economic bracket may not be too concerned with energy consumption and maintenance efficiency (e.g. *fireplace_openings* and *amp_rating*).
+
+```{r, echo=FALSE, include=TRUE}
+new_train_df <- train_df %>% filter((train_df$Dane_long >= 456289.1 & train_df$Dane_long<= 515628.9) 
+                                     & (train_df$Dane_lat >= 773601.8 & train_df$Dane_lat<= 855335.6) 
+                                      & (train_df$total_full_bath>=2))
+
+obs0 <- train_df[train_df$style==12,]
+obs1 <- train_df[train_df$plumbing_class==1,]
+obs2 <- train_df[train_df$amp_rating==50 | train_df$amp_rating==70 | train_df$amp_rating==75
+                 | train_df$amp_rating==175 | train_df$amp_rating==300,]
+
+new_train_df <- rbind(new_train_df, obs0)
+new_train_df <- rbind(new_train_df, obs1)
+new_train_df <- rbind(new_train_df, obs2)
+
+model2 <- lm(sale_price ~ lot_size + style +
+               quality_class +
+               ground_floor_area + t2nd_floor_area + stalls_garage_1 +
+               total_full_bath + central_air +
+               age + landscaping + wooded +
+               elementary_school_number + middle_school_number + high_school_number 
+              , data = new_train_df)
+```
+
+```{r, echo=FALSE, include=FALSE, eval = FALSE}
+pred4 <- predict(model2, test2_df, type="response")
+```
+
+```{r, echo=FALSE, include=TRUE, eval = FALSE}
+rf2_results <-
+  test2_df %>%
+  select(X, parcel_number, sale_date)
+rf2_results$sale_price <- pred4
+rf2_results$question <- "question_3"
+```
+
+### Predicting the sale price of the second test set
+After running the regression model with the selected variables, I want to use a case-by-case estimation of the systematic underestimation/overestimation that resulted from using a training data set that is substantially different from the testing data set. As mentioned beforehand, some houses were located in a national historic neighborhood. The economic value of national register listings has been researched as consistently appreciating faster than the rest of the real estate market.^[Donovan D. Rypkema, *The (Economic) Value of
+National Register Listing*, 2002, accessible at: https://www.dahp.wa.gov/sites/default/files/EconomicValue_ofNR_Listing.pdf] This makes sense since historic district attract visitors, businesses and government conservation. As such, I will multiply the value of these homes by 1.5.
+
+In addition, I want to take into consideration the outlier values in certain homes, specifically those with a substantially larger *lot_size* (i.e. above the upper bound of 27872.7 sqrft), an additional *t3rd_floor_area* and *above_3rd_floor_area* as well as an unusual number of *total_full_bathrooms* (5 or more bathrooms). These homes can be classified as luxury homes whose prices are usually in a completely different bracket. As such, I multiply the sale price of these homes by 2.5.
+
+For the rest of the observations, I take into account other systematic issues that may not be directly visible in the data (e.g. the marginal value of additional usable spaces as homes become more expensive, the price elasticity of home buyers in higher economic brackets, etc.). Thus, I multiply the rest of the values by 1.25.
+
+```{r, echo=FALSE, include=FALSE, eval = FALSE}
+historic <- test2_df[test2_df$national_historic_district==1,]
+historic
+
+rf2_results$sale_price<-ifelse(rf2_results$parcel_number %in% historic$parcel_number, rf2_results$sale_price*1.5, rf2_results$sale_price)
+
+luxury <- test2_df[test2_df$total_full_bath>=5 | test2_df$lot_size>=27872.7 |
+                     test2_df$above_3rd_floor_area > 0 | test2_df$t3rd_floor_area >0, ]
+luxury
+
+'%!in%' <- function(x,y)!('%in%'(x,y))
+
+rf2_results$sale_price<-ifelse(((rf2_results$parcel_number %!in% luxury$parcel_number) 
+                               & (rf2_results$parcel_number %!in% historic$parcel_number))
+                                 , rf2_results$sale_price*1.25, rf2_results$sale_price)
+
+write.csv(rf2_results ,"part3_2.csv", row.names = TRUE)
+```
+## Appendix 1:
+
+```{r, echo=FALSE, include=TRUE}
+model0 <- lm(sale_price ~. , data = train_df)
+summary(model0)
+```
+
+## Appendix 2:
+
+```{r, echo=FALSE, include=TRUE}
+summary(model1)
+```
+
+## Appendix 3:
+
+```{r, echo=FALSE, include=TRUE}
+summary(model2)
+```

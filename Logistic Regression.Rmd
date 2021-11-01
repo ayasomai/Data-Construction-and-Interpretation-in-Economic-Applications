@@ -1,0 +1,871 @@
+---
+title: "Assignment 3"
+author: "Aya Somai"
+date: "10/05/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, comment=NA, message=FALSE, warning=FALSE, fig.width=10, fig.height=10)
+```
+
+```{r, message=FALSE, warning=FALSE,echo=FALSE}
+library(sf)
+library(raster)
+library(dplyr)
+library(ggplot2)
+library(sf)
+library(plotly)
+library(ggthemes)
+library(tidyr)
+library(foreign)
+library(haven)
+library(scales)
+library(ggpubr)
+library(data.table)
+library(aod)
+library(ggbiplot)
+library(car)
+library(rsample)    
+library(randomForest)
+library(ranger)      
+library(caret)
+library(prediction)
+library(pROC)
+library(plotROC)
+library(Metrics)
+library(varhandle)
+```
+
+
+```{r, echo=FALSE, warning=FALSE, include=FALSE}
+setwd("~/Desktop/Aya Somai - Desktop/ECON 21300 : Data Construction and Interpretation in Economic Applications/Assignment 3")
+championship <- read_dta("championships.dta")
+championship = as.data.frame(championship)
+#champ_df <- championship
+seasons <- read_dta("regular_seasons.dta")
+seasons = as.data.frame(seasons)
+#seasons_df <- seasons
+qualifiers <- read_dta("2020_qualifiers.dta")
+qualifiers = as.data.frame(qualifiers)
+#qualifiers_df <- qualifiers
+```
+
+## Question 1: Getting to know the trivia competition data
+
+### Overview of the competitions
+In the regular rounds of the trivia competition, there are a total of 18 categories of general knowledge ranging from American History, Literature and Art to Mathematics, Film and Games/Sports. Every regular season consists of 25 rounds of matches and a total of 6 questions per round. The championship consists of 4 rounds of competition and 12 questions per round.
+
+```{r, echo=FALSE, include=FALSE}
+range(seasons$season)
+cat <- unique(seasons$category)
+length(cat)
+range(championship$round)
+range(championship$question)
+```
+
+### Characteristics of the competitors
+In terms of the players, there is a total of 49 trivia competitors who qualified for the championships in both 2018 and 2019. There are 125 competitors who qualified for the championships in both 2019 and 2020 while there are 88 competitors who qualified in both 2018 and 2020. There are 47 competitors who qualified in all years (i.e. 2018, 2019 and 2020). 
+
+We also notice an increase in the number of competitors during the championships from 120 players in 2018, to 156 players in 2019 and 504 players in 2020. This can be explained by a surge in the number of competitors during the regular season from 10806 players in 2018, to 15783 players in 2019 and 19766 players in 2020. This increase in participation may be due to an increased popularity of the competition within the online community (e.g. more wide-reaching marketing strategies, improved competition platform, etc.).
+
+```{r, echo=FALSE}
+seasons$year <- NULL
+seasons$year[seasons$season>=72 & seasons$season<=75] <- 2017
+seasons$year[seasons$season>=76 & seasons$season<=79] <- 2018
+seasons$year[seasons$season>=80 & seasons$season<=83] <- 2019
+seasons$year[seasons$season>=84 & seasons$season<=85] <- 2020
+```
+
+```{r, echo=FALSE, include=FALSE}
+Y18 <- championship[ which(championship$year=='2018'), ] 
+Y18_num<- unique(Y18$id)
+Y19 <- championship[ which(championship$year=='2019'), ] 
+Y19_num<- unique(Y19$id)
+
+length(Y18_num)
+length(Y19_num)
+length(qualifiers$id)
+
+champ_18_19=intersect(Y19_num, Y18_num)
+length(champ_18_19)
+
+champ_19_20=intersect(Y19_num, qualifiers$id)
+length(champ_19_20)
+
+champ_18_20=intersect(Y18_num, qualifiers$id)
+length(champ_18_20)
+
+all_champ=intersect(intersect(Y18_num, qualifiers$id), Y19_num)
+length(all_champ)
+```
+
+```{r, echo=FALSE, include=FALSE, eval=TRUE}
+reg_Y18 <- seasons[ which(seasons$year=='2018'), ] 
+reg_Y18_num<- unique(reg_Y18$user_id)
+length(reg_Y18_num)
+
+reg_Y19 <- seasons[ which(seasons$year=='2019'), ] 
+reg_Y19_num<- unique(reg_Y19$user_id)
+length(reg_Y19_num)
+
+reg_Y20 <- seasons[ which(seasons$year=='2020'), ] 
+reg_Y20_num<- unique(reg_Y20$user_id)
+length(reg_Y20_num)
+```
+
+### Performance during the competition
+#### Performance during the championships
+Plotting the percentage of correct answers in each round of the 2018 and 2019 championships, we can see that the percentage decreases as competitors advance to the later rounds. This may indicate an increased difficulty in the questions posed to the competitors. It is interesting, however, to see that the level of difficulty in the first two rounds was comparatively similar in 2018, while the second round was substantially more difficult than the first round in 2019.
+
+```{r, echo=FALSE, fig.height=5}
+t_champ1 <- table(championship$year, championship$round, championship$correct)
+t_champ1 <- prop.table(t_champ1, margin = 1)
+t_champ1 <- as.data.frame(t_champ1)
+
+plot_champ1 <-
+  ggplot(t_champ1, aes(x = Var1, y=Freq, fill=Var2)) + 
+  geom_bar(stat="identity", position = "dodge") + 
+  labs(y = "Percent", x="Year", fill="Round of the Championships") +
+  scale_fill_manual(values=c("ivory4","lightcyan3", "gold3", "seagreen3"))
+
+plot_champ1 
+```
+We now look at the distribution of correct answers in the 2018 and 2019 championships:
+
+```{r, echo=FALSE, include=FALSE, eval=TRUE}
+champ_2018 <- championship %>% 
+  filter(year==2018) %>%
+  group_by(id) %>%
+  mutate_at(vars(correct), sum) %>%
+  mutate_at(vars(round:question), max)
+
+champ_2018$questions <- champ_2018$question * champ_2018$round
+
+champ_2018=as.data.frame(champ_2018)
+
+champ_2018 <- subset (champ_2018, select = -c(question, year))
+
+champ_2018 <- unique(champ_2018)
+
+champ_2018$prop = (champ_2018$correct / champ_2018$questions) * 100
+
+champ_2018
+```
+
+```{r, echo=FALSE}
+plot_champ2 <- champ_2018 %>% 
+    ggplot(aes(x=prop)) + 
+    geom_histogram(aes(y=..density..),      # Histogram with density instead of count on y-axis
+                   colour="ivory4", fill="lightcyan3") +
+    geom_density(alpha=.2, fill="gold3") +  # Overlay with transparent density plot
+    ggtitle("Performance distribution during the 2018 Championships") +
+    xlab("Proportion of correct answers") + ylab("Density of players")
+```
+
+
+```{r, echo=FALSE, include=FALSE, eval=TRUE}
+champ_2019 <- championship %>% 
+  filter(year==2019) %>%
+  group_by(id) %>%
+  mutate_at(vars(correct), sum) %>%
+  mutate_at(vars(round:question), max)
+
+champ_2019$questions <- champ_2019$question * champ_2019$round
+
+champ_2019=as.data.frame(champ_2019)
+
+champ_2019 <- subset (champ_2019, select = -c(question, year))
+
+champ_2019 <- unique(champ_2019)
+
+champ_2019$prop = (champ_2019$correct / champ_2019$questions) * 100
+
+champ_2019
+```
+
+```{r, echo=FALSE}
+plot_champ3 <- champ_2019 %>% 
+    ggplot(aes(x=prop)) + 
+    geom_histogram(aes(y=..density..),      # Histogram with density instead of count on y-axis
+                   colour="ivory4", fill="lightcyan3") +
+    geom_density(alpha=.2, fill="gold3") +  # Overlay with transparent density plot
+    ggtitle("Performance distribution during the 2019 Championships") +
+    xlab("Proportion of correct answers") + ylab("Density of players")
+
+champ_plots <- ggarrange(plot_champ2, plot_champ3, ncol = 2, nrow = 1)
+champ_plots
+```
+
+#### Performance during the regular season
+We plot the proportion of correct vs. incorrect answers in each season of competition between 2017 and 2020. We obtain the following results:
+
+```{r, echo=FALSE, fig.height=5, fig.width=5}
+t1_prop <- table(seasons$year, seasons$correct, seasons$season)
+t1_prop <- prop.table(t1_prop, margin = 1)
+t1_prop <- as.data.frame(t1_prop)
+
+plot2 <- ggplot(t1_prop, aes(x = Var1, y=Freq, fill=Var2)) + 
+  geom_bar(stat="identity", position = "fill") + 
+  scale_fill_manual("Correct", values=c("gold3", "lightcyan3"), labels=c("False", "True", alpha=0.25)) +
+  labs(y = "Percent", x="Year", fill="Correct") 
+
+plot2
+```
+The barchart does not demonstrate a substantial year-over-year change in the percentage of correct answers in the regular season trivia.^[Analysis on the season-over-season change did not demonstrate a substantial change in the proportion of correct vs. incorrect answers either.]
+
+It would be interesting to visualize the *distribution* of correct answers across the players (rather than the proportion of correct answers from one year to the other and one season to the next). Since our championship data is limited to 2018 and 2019, we will focus on the regular seasons between these two years in order to compare the performance of players.
+
+```{r, echo=FALSE, include=FALSE, eval=TRUE}
+seasons_df <- seasons
+
+season_2019 <- seasons_df %>% 
+  filter(year==2019) %>%
+  group_by(user_id) %>%
+  mutate(seasons=max(season)-min(season)+1) %>%
+  mutate_at(vars(correct), sum) %>%
+  mutate_at(vars(match:question), max)
+
+season_2019$questions <- season_2019$question * season_2019$match * season_2019$seasons
+
+season_2019 <- subset (season_2019, select = -c(question, match, year))
+
+season_2019 <- unique(season_2019)
+
+season_2019$prop = (season_2019$correct / season_2019$questions) * 100
+
+season_2019
+```
+
+```{r, echo=FALSE}
+plot_season1 <- season_2019 %>% 
+    ggplot(aes(x=prop)) + 
+    geom_histogram(aes(y=..density..),      # Histogram with density instead of count on y-axis
+                   colour="ivory4", fill="lightcyan3") +
+    geom_density(alpha=.2, fill="gold3") +  # Overlay with transparent density plot
+    ggtitle("Performance Distribution during the 2019 Regular Season") +
+    xlab("Proportion of correct answers") + ylab("Density of players")
+```
+
+```{r, echo=FALSE, include=FALSE, eval=TRUE}
+season_2018 <- seasons_df %>% 
+  filter(year==2018) %>%
+  group_by(user_id) %>%
+  mutate(seasons=max(season)-min(season)+1) %>%
+  mutate_at(vars(correct), sum) %>%
+  mutate_at(vars(match:question), max)
+
+season_2018$questions <- season_2018$question * season_2018$match * season_2018$seasons
+
+season_2018 <- subset (season_2018, select = -c(question, match, year))
+
+season_2018 <- unique(season_2018)
+
+season_2018$prop = (season_2018$correct / season_2018$questions) * 100
+
+season_2018
+```
+
+```{r, echo=FALSE}
+plot_season2 <- season_2018 %>% 
+    ggplot(aes(x=prop)) + 
+    geom_histogram(aes(y=..density..),      # Histogram with density instead of count on y-axis
+                   colour="ivory4", fill="lightcyan3") +
+    geom_density(alpha=.2, fill="gold3") +  # Overlay with transparent density plot
+    ggtitle("Performance Distribution during the 2018 Regular Season") +
+    xlab("Proportion of correct answers") + ylab("Density of players")
+```
+
+```{r, echo=FALSE, include=FALSE, eval=TRUE}
+season_2017 <- seasons_df %>% 
+  filter(year==2017) %>%
+  group_by(user_id) %>%
+  mutate(seasons=max(season)-min(season)+1) %>%
+  mutate_at(vars(correct), sum) %>%
+  mutate_at(vars(match:question), max)
+
+season_2017$questions <- season_2017$question * season_2017$match * season_2017$seasons
+
+season_2017 <- subset (season_2017, select = -c(question, match, year))
+
+season_2017 <- unique(season_2017)
+
+season_2017$prop = (season_2017$correct / season_2017$questions) * 100
+
+season_2017
+```
+
+```{r, echo=FALSE}
+plot_season3 <- season_2017 %>% 
+    ggplot(aes(x=prop)) + 
+    geom_histogram(aes(y=..density..),      # Histogram with density instead of count on y-axis
+                   colour="ivory4", fill="lightcyan3") +
+    geom_density(alpha=.2, fill="gold3") +  # Overlay with transparent density plot
+    ggtitle("Performance Distribution during the 2017 Regular Season") +
+    xlab("Proportion of correct answers") + ylab("Density of players")
+```
+
+```{r, echo=FALSE, include=FALSE, eval=TRUE}
+season_2020 <- seasons_df %>% 
+  filter(year==2020) %>%
+  group_by(user_id) %>%
+  mutate(seasons=max(season)-min(season)+1) %>%
+  mutate_at(vars(correct), sum) %>%
+  mutate_at(vars(match:question), max)
+
+season_2020$questions <- season_2020$question * season_2020$match * season_2020$seasons
+
+season_2020 <- subset (season_2020, select = -c(question, match, year))
+
+season_2020 <- unique(season_2020)
+
+season_2020$prop = (season_2020$correct / season_2020$questions) * 100
+
+season_2020
+```
+
+```{r, echo=FALSE}
+plot_season4 <- season_2020 %>% 
+    ggplot(aes(x=prop)) + 
+    geom_histogram(aes(y=..density..),      # Histogram with density instead of count on y-axis
+                   colour="ivory4", fill="lightcyan3") +
+    geom_density(alpha=.2, fill="gold3") +  # Overlay with transparent density plot
+    ggtitle("Performance Distribution during the 2020 Regular Season") +
+    xlab("Proportion of correct answers") + ylab("Density of players")
+```
+
+```{r, echo=FALSE}
+champ_plots <- ggarrange(plot_season3, plot_season1, plot_season2, plot_season4, ncol = 2, nrow = 2)
+champ_plots
+```
+
+## Question 2: Predicting the potential of right and wrong answers a particular question in the regular season
+We begin by exploring predictive models using the trivia competitors' data in the regular season between 2017 and 2020. However, it is important to discuss assumptions we will maintain while building our model. First of all, we assume that the only possibility to cheat is during the regular season of the competition whereby players abide to the honorary code. As mentioned in the problem statement, it is impossible to cheat in the championship since the tourney is live. We will also assume that the trivia questions are in comparable levels of difficulty from: 1) One year to another, 2) One season to the next and, 3) One round to the other. However, we will explore whether we can maintain this assumption between the regular season and the championship tourney (see Question 3). Lastly, we will assume that players will only cheat on questions they do not know the answers to. This implies that: 1) The effect of cheating is upwards, and 2) Cheating happens when a question is difficult (less likely to be answered by the majority of the players).
+
+Keeping these assumptions in mind, we will define a cheater as someone who answers a question correctly when the probability of an incorrect answer is high. As such, we are not concerned with detecting *systematic* cheaters, i.e. the players who will cheat on every question in every round and every season in each year of the regular competition. More specifically, we want to detect the players who occasionally cheat on questions that are difficult. At the same time, some systematic cheaters may intentionally answer a difficult question incorrectly in order to decrease the chances of being detected. We will account for these possibilities in the following models.
+
+In order to predict whether or a not a person will get a particular question right in the regular season, we take into account three main variables: 1) Difficulty of the question, 2) Ability of the player, and 3) Player performance by category of question. The next subsections explain the rationale and process used to determine the effect of each variable.
+
+### Estimating the level of difficulty by question
+#### Difficulty associated with the category
+The following table demonstrates that there is a level of difficulty associated with a particular category of questions. Moreover, the diverging levels of difficulty between categories is observable at the individual level, i.e. some players perform better in certain categories than others. It is important, therefore, to control for *category* as an independent variable in the prediction model.
+
+```{r, echo=FALSE}
+xtabs(~correct + category, data = seasons)
+xtabs(~correct + season, data = seasons)
+```
+
+#### Difficulty assocuated with the question within the category
+As demonstrated below, there is a distribution on the level of difficulty by question determined by the proportion of players who answer the question correctly. To clarify, each question is grouped by the season, round, and order in which it was asked. While the independent variable *category* controls for the category-level difficulty, we also need to account for the question-level difficulty within each category. As such, we use the proportion of correct answers as a way to indicate the level of difficulty of a particular question. We categorize the level of difficulty from 1 to 5 in the following way^[Note: Even though we add this categorization as a way to understand the data better, we still use the point-value of the proportion of players who answer a question correctly in the regression analyses.]:
+
+* Level 1: More than 80% correct answers;
+* Level 2: More than 60% and less than 80% correct answers;
+* Level 3: More than 40% and less than 60% correct answers;
+* Level 4: More than 20% and less than 40% correct answers;
+* Level 5: Less than 20% correct answers.
+
+```{r, echo=FALSE, include=FALSE, eval=TRUE}
+question_diff <- seasons %>% 
+  group_by(season, match, question) %>% 
+  dplyr::summarise(avg = mean(correct)) %>% 
+  arrange(desc(avg)) 
+
+range(question_diff$avg)
+
+question_diff$diff <- NULL
+question_diff$diff[question_diff$avg>=0 & question_diff$avg<0.20] <- 5
+question_diff$diff[question_diff$avg>=0.20 & question_diff$avg<0.40] <- 4
+question_diff$diff[question_diff$avg>=0.40 & question_diff$avg<0.60] <- 3
+question_diff$diff[question_diff$avg>=0.60 & question_diff$avg<0.80] <- 2
+question_diff$diff[question_diff$avg>=0.80 & question_diff$avg<=1] <- 1
+
+question_diff
+
+logit_df = inner_join(seasons, question_diff, by = c("season" = "season", "match" = "match", "question" = "question"))
+logit_df
+```
+
+### Estimating the player performance
+In a similar way, we try to understand the performance of players during the regular season. We categorize players from: Beginner to Advanced based on the average scores they achieve during the total time they participate in the competition. We categorize the level of player ability in the following way^[Note: Even though we add this categorization as a way to understand the data better, we still use the point-value of the proportion of correct answers per player in the regression analyses.]:
+
+* Beginner: Less than 20% correct answers;
+* Beginner-Intermediate: More than 20% and less than 40% correct answers;
+* Intermediate: More than 40% and less than 60% correct answers;
+* Intermediate-Advanced: More than 60% and less than 80% correct answers;
+* Advanced: More than 80% correct answers.
+
+```{r, echo=FALSE, include=FALSE, eval=TRUE}
+player_perf <- seasons %>% 
+  group_by(user_id) %>% 
+  dplyr::summarise(average_player = mean(correct)) %>% 
+  arrange(desc(average_player)) 
+
+player_perf
+
+player_perf$perf <- NULL
+player_perf$perf[player_perf$average_player>=0 & player_perf$average_player<0.20] <- "Beginner"
+player_perf$perf[player_perf$average_player>=0.20 & player_perf$average_player<0.40] <- "Beginner-Intermediate"
+player_perf$perf[player_perf$average_player>=0.40 & player_perf$average_player<0.60] <- "Intermediate"
+player_perf$perf[player_perf$average_player>=0.6 & player_perf$average_player<0.80] <- "Intermediate-Advanced"
+player_perf$perf[player_perf$average_player>=0.8 & player_perf$average_player<=1] <- "Advanced"
+
+logit_df = join(logit_df, player_perf, by = c("user_id" = "user_id"))
+logit_df
+
+logit_df$category <- as.factor(logit_df$category)
+logit_df$correct <- as.factor(logit_df$correct)
+logit_df$perf <- as.factor(logit_df$perf)
+logit_df$diff <- as.factor(logit_df$diff)
+```
+
+We use the previous assumptions and model specifications to build a predicitve model on whether or a not a person will get a particular question right in the regular season. We will use two main models: Logistic regression and Random Forest. The following subsections discuss the characteristics of each model and present the output results.
+
+## Using Logistic Regression
+We use a logistic regression since this statistical model uses a logistic function to model a binary rather than a continuous dependent variable (i.e. *correct* = 1 or *correct* = 0). This kind of binary regression can help us estimate the coefficients of the independent variables outlined above (*diff* for question difficulty, *perf* for player performance and *category* for question category). I split the data into 70% training data (*logit_train*) and 30% testing data (*logit_test*) for both models in order to evaluate their fit and performance.Running the logistic regression, we obtain the following results:
+
+```{r, echo=FALSE, include=FALSE, eval=TRUE}
+set.seed(123)
+logit_df_subset=sample_n(logit_df, 10000000)
+logit_split <- initial_split(logit_df_subset, prop = .7)
+logit_train <- training(logit_split)
+logit_test  <- testing(logit_split)
+```
+
+```{r, echo=FALSE}
+mylogit1 <- glm(correct ~ avg + average_player + category, data = logit_train, family = "binomial")
+summary(mylogit1)
+```
+
+We evaluate the fit and performance of the logistic model. Note that I have added/subtracted variables and tested the model fit with each variation of the model until accuracy could not be improved further.
+
+```{r, echo=FALSE, include=FALSE, eval=TRUE}
+pred0 <- ifelse(predict(mylogit1, newdata=logit_test, type="response")>.5, 1, 0)
+```
+
+The confusion matrix indicates approximately 71.39% accuracy in the model fit between the actual and predicted values of the testing data. The 95% confidence interval of accuracy is between 0.7134 and 0.7145.
+
+```{r, echo=FALSE, include=TRUE}
+confusionMatrix(data=as.factor(pred0), as.factor(logit_test$correct))
+```
+
+Next, we plot Receiver Operating Characteristic (ROC) curve which plots the true positive rate (TPR) against the false positive rate (FPR) of the logistic model. The area under the curve equals to 0.714. As a reference, a fitted model with 100% false positive predictions has an AUC of 0.0 and one with a true positive rate of 100% has an AUC of 1.0.
+
+## Using Random Forest
+We now divert our attention to the Random Forest statistical model. The Random Forest constructs a specified number of decision trees and outputs an average prediction of regression coefficients from each individual tree. In a way, the Random Forest model is a combination of bootstrapping and decision trees. The randomization of the tree building process can reduce the variance of predictions from a single tree, hence increase its predictive performance.^[Random Forests, *UC Business Analytics R Programming Guide* available at https://uc-r.github.io/random_forests]
+
+As delineated above, we split the model into training and testing data. We obtain the following results:
+
+```{r, echo=FALSE, eval = TRUE}
+rf1 <- randomForest(formula = correct ~ avg + average_player + category, data=logit_train, ntree=25)
+pred1 <- predict(rf1, newdata=logit_test, type="response")
+```
+
+We evaluate the fit and performance of the Random Forest. We attain 71.57% accuracy in the model fit between the actual and predicted values of the testing data. The confidence interval of the model accuracy is between 0.7152 and 0.7162.
+
+```{r, echo=FALSE, include=TRUE}
+accuracy(logit_test$correct, pred1)
+```
+
+```{r, echo=FALSE, include=TRUE}
+confusionMatrix(data=as.factor(pred1), as.factor(logit_test$correct))
+```
+
+## Question 3: Predicting the potential of right and wrong answers a particular question in the championships
+To predict whether or not a player will get a particular question right in the first two rounds of the championship, we can maintain the same rationale and assumptions outlined in the previous question while adding a new layer of complexity: increased difficulty from the regular season to the championship round. However, the championship data does not indicate the categories of questions asked. As a result, we cannot control for the category-level performance for each player. Regardless of the specific category, we will use the level of question difficulty in each round (approximated by the proportion of correct answers) as an indicator. This may be a reasonable assumption since a player who qualifies to the championships is more likely to have a comparable level of knowledge in different categories rather than show proficiency in only a few of them.
+
+As shown in the model fit and performance in the previous question, we will use the logistic regression as a more precise statistical model on the subset of players who qualified for the 2018 and 2019 championships. We will assume that the players' ability and performance remains the same in the regular season and the championship tournament. In other words, their probability of answering a question correctly is *only* affected by the increased difficulty of the championship questions.
+
+In order to explore the effect of difficulty in the championship results, we can explore the performance of those players who consistently qualified to the championships between 2018 and 2020. Running the same regression on the entire player population can separate the effect of the level of difficulty from the effect of the possibility to cheat. This is because, by assumption, those who are consistently performing well are less likely to maintain the same performance by cheating. 
+
+Note: Our analysis in Question 1 shows that in the championship round, there is an increased level of difficulty between the first two rounds (semi-final) and the last two rounds (final). As a result, we filter the *championship* data to analyze the performance of the players in the first two rounds only.
+
+```{r, echo=FALSE, include=FALSE, eval=TRUE}
+merged_seasons <- seasons %>% 
+  filter(year==2018 | year==2019) %>%
+  filter(user_id %in% championship$id) %>% 
+  group_by(user_id, year) %>% 
+  dplyr::summarise(prop_correct=mean(correct))
+
+merged_seasons$competition <- 1
+merged_seasons
+
+merged_champs <- championship %>%
+  filter(round==1 | round==2) %>% 
+  group_by(id, year) %>% 
+  dplyr::summarise(prop_correct=mean(correct))
+
+merged_champs$competition <- 0
+merged_champs
+
+dt1 <- data.table(merged_champs, key = "id") 
+dt2 <- data.table(merged_seasons, key = "user_id")
+
+setnames(dt2, "user_id", "id")
+
+merged_competition = rbind(dt1, dt2)
+merged_competition
+```
+
+```{r, echo=FALSE}
+reg1 <- lm(I(prop_correct) ~ competition + factor(year), data=merged_competition)
+names(reg1$coefficients) <- c('Intercept','Regular Season', 'Year Fixed Effect')
+summary(reg1)
+```
+
+```{r, echo=FALSE}
+merged_best <- merged_competition %>% 
+  filter(id %in% all_champ)
+
+reg2 <- lm(I(prop_correct) ~ competition + factor(year), data=merged_best)
+names(reg2$coefficients) <- c('Intercept','Regular Season', 'Year Fixed Effect')
+summary(reg2)
+```
+
+For those who consistently performed well during the regular season and qualified to the championships between 2018 and 2020, playing in the regular season increases the proportion of correct answers by 0.19186 (versus an increase of 0.259099 for all other qualifying players). This coefficient estimate is statistically significantly different from zero at 1% significance level with a t-statistic of 10.725 (SD=0.01789). Based on our assumption, we can attribute this coefficient estimate to the effect of the difference in difficulty between the regular season and the championships. Speculatively, the difference in the coefficient estimates between these two regressions can be associated with the effect of the ability to cheat in the regular season. In the next steps, we run the same models used above while accounting for the increased level of difficulty to predict whether a certain person would get a question right in **the first two rounds** of the championship tournament.
+
+```{r, echo=FALSE, include=FALSE, eval=TRUE}
+df_rf <- logit_df %>%
+  mutate(average_player = average_player - 0.19186)
+
+names(df_rf)[names(df_rf) == "avg"] <- "average_question"
+
+player_perf_champ <- championship %>%
+  group_by(id) %>% 
+  dplyr::summarise(average_player = mean(correct)) %>% 
+  arrange(desc(average_player))
+
+logit_df_champ = inner_join(championship, player_perf_champ, by = c("id"="id"))
+
+question_diff_champ <- championship %>% 
+  group_by(year, round, question) %>% 
+  dplyr::summarise(average_question = mean(correct)) %>% 
+  arrange(desc(average_question)) 
+
+logit_df_champ = inner_join(logit_df_champ, question_diff_champ, by = c("year" = "year", "round" = "round", "question" = "question"))
+
+logit_df_champ$round <- as.factor(logit_df_champ$round)
+logit_df_champ$year <- as.factor(logit_df_champ$year)
+```
+
+Once we adjust for the ability of a player to answer questions correctly when there is an increased difficulty, we can now re-estimate the two previous models using data on question difficulty and player ability for players who qualified to the championships in 2018 and 2019. 
+
+## Using Logistic Regression
+```{r, echo=FALSE}
+set.seed(123)
+champ_subset <- logit_df_champ %>% filter(round==1 | round==2)
+
+logit_split_champ <- initial_split(champ_subset, prop = .7)
+logit_train_champ <- training(logit_split_champ)
+logit_test_champ  <- testing(logit_split_champ)
+
+mylogit2 <- glm(correct ~ average_question + average_player + round + year, data = logit_train_champ, family = "binomial")
+names(mylogit2$coefficients) <- c('Intercept','Question Difficulty', 'Player Ability', 'Round Fixed Effet', 'Year Fixed Effect')
+summary(mylogit2)
+```
+
+We evaluate the fit and performance of the logistic regression. We attain 71.63% accuracy in the model fit between the actual and predicted values of the testing data. The confidence interval of the model accuracy is between 0.6959 and 0.736.
+
+```{r, echo=FALSE}
+pred2 <- ifelse(predict(mylogit2, newdata=logit_test_champ, type="response")>.5, 1, 0)
+confusionMatrix(data=as.factor(pred2), as.factor(logit_test_champ$correct))
+```
+
+We use this fitted model to compare the cross-sectional data on the predicted reponse for each player in a particular question of the championship. In other words, we *only* use information from their performance in the regular season to evaluate whether our model correctly predicts their performance in the championship season.
+
+```{r, echo=FALSE}
+mylogit2_1 <- glm(correct ~ average_question + average_player + year, data = logit_train_champ, family = "binomial")
+df_rf_test <- df_rf %>%  filter(user_id %in% championship$id) %>%  filter(year==2018 | year==2019)
+df_rf_test$year <- as.factor(df_rf_test$year)
+pred3 <- ifelse(predict(mylogit2_1, newdata=df_rf_test, type="response")>.5, 1, 0)
+confusionMatrix(data=as.factor(pred3), as.factor(df_rf_test$correct))
+```
+
+Using *only* data on their performance in the regular season, the predicted answers for each player in the first two rounds of the championships is 73.08% accurate. The confidence interval for the accuracy is between 72.91% and 73.25%. We repeat the same procedure using the Random Forest method below.
+
+```{r, echo=FALSE}
+rf2 <- randomForest(correct ~ average_question + average_player + round + year, data = logit_train_champ, ntree=500)
+
+pred4 <- ifelse(predict(rf2, newdata=logit_test_champ, type="response")>.5, 1, 0)
+
+accuracy(logit_test_champ$correct, pred4)
+
+confusionMatrix(data=as.factor(pred4), as.factor(logit_test_champ$correct))
+```
+
+Similarly to the procedure used with the logistic regression model, we use random forest to compare the cross-sectional data on the predicted response for each player in a particular question of the championship. Again, we *only* use data from the players' performance in the regular season to evaluate whether our random forest correctly predicts their performance in the championship season.
+
+```{r, echo=FALSE}
+rf2_2 <- randomForest(correct ~ average_question + average_player + year, data = logit_train_champ, ntree=500)
+pred5 <- ifelse(predict(rf2_2, newdata=df_rf_test, type="response")>.5, 1, 0)
+confusionMatrix(data=as.factor(pred5), as.factor(df_rf_test$correct))
+```
+
+The predicted response for each player in the first two rounds of the championships is 73.47% accurate. The confidence interval for the accuracy is between 73.3% and 73.64%. The accuracy of the random forest is slightly yet insignificantly higher than the logistic regression model. Moreover, both models have similar levels of sensitivity (0.6338 vs. 0.6128) and specificity (0.7551 vs. 0.7653).
+
+## Question 4:
+Using the logistic regression model (see Question 2), we plot the predicted values in probability of correct answer and the actual performance of each player.^[Here, I used a random subset of 1% from the data since plotting all players was not visually intelligible.] The plot shows a visible divergence between the predicted and actual values, especially on the more difficult questions (i.e. low probability of correct answers). However, this divergence may be related to the model fit inaccuracy and/or the cheating pattern. In the following section, we investigate the players who had a substantially different predicted and actual data points for answering correctly. Looking at this subset of the data may identify the cheating pattern.^[Note: The following sections account for model accuracy in the calculations of the proportion of cheating players.]
+
+```{r, echo=FALSE}
+subset04 = sample_n(logit_df_subset, 100000)
+pred04 <- predict(mylogit1, newdata=subset04, type="response")
+
+pred004 <- ifelse(predict(mylogit1, newdata=subset04, type="response")>.5, 1, 0)
+
+fit_plot0 <- ggplot() + 
+    geom_point( aes(x = subset04$user_id, y = subset04$average_player, color = 'red', alpha = 0.5) ) + 
+    geom_point( aes(x = subset04$user_id, y = pred04, color = 'blue',  alpha = 0.5)) +
+    geom_smooth(aes(x = subset04$user_id, y = pred004),
+               method = "glm", method.args = list(family = "binomial"), 
+                se = FALSE) +
+    labs(x = "Player", y = "Probability of correct answer", alpha = 'Transperency') +
+    scale_color_manual(labels = c( "Predicted", "Acutal"), values = c("blue", "red")) 
+
+fit_plot0
+```
+
+We start by looking at the actual vs. predictive data from the regular season data points using the logistic regression model above. The results indicate that approximately 14.09% of the players are predicted to have different results than their actual answers (i.e. the response is predicted to be incorrect when their actual answer was correct). We also know that our model is 71.57% accurate. Then, we can approximate the number of cheaters to approximately 10.08% of the players in the regular season.
+
+```{r, echo=FALSE, inlude=FALSE}
+actualAndPredictedData3 = data.frame(actualValue = logit_df$correct,
+                                    predictedValue = pred3)
+
+actualAndPredictedData3
+
+actualAndPredictedData3$actualValue <- unfactor(actualAndPredictedData3$actualValue)
+
+actualAndPredictedData3$difference=as.numeric(actualAndPredictedData3$actualValue)-as.numeric(actualAndPredictedData3$predictedValue)
+
+ratio1=(nrow(filter(actualAndPredictedData3, difference == -1)) / nrow(actualAndPredictedData3)) *100
+
+ratio1
+```
+
+Next, we identify the players who cheated regularly. We do this by calculating the ratio of the number of correct answers that were predicted to be incorrect for each player over the total number of questions they answered in regular season. Then, we calculate the adjusted-ratio of cheating by accounting for model accuracy level. We obtain the following distribution of adjusted-ratio of cheating across all players:
+
+```{r, echo=FALSE, include=FALSE}
+pred3 <- ifelse(predict(mylogit1, newdata=logit_df, type="response")>.5, 1, 0)
+pred03 <- as.data.frame(pred3)
+pred003 <- cbind(logit_df, pred03)
+pred003 
+
+pred0003 <- pred003 %>% 
+  group_by(user_id) %>% 
+  dplyr::summarise(total=n())
+
+mismatch <- pred003[pred003$correct==1 & pred003$pred3==0, ]
+
+mismatch <- mismatch %>% 
+  group_by(user_id) %>% 
+  dplyr::summarise(count=n())
+
+pred0003 <- pred0003 %>% 
+  filter(pred0003$user_id %in% mismatch$user_id)
+  
+mismatch 
+pred0003
+cheaters = data.frame(user_id = mismatch$user_id, number = mismatch$count, total = pred0003$total)
+cheaters$ratio = (cheaters$number/cheaters$total) * 100
+cheaters
+cheaters$ratio_adj = cheaters$ratio * 0.7157
+```
+
+```{r, echo=FALSE}
+plot_pred03 <- cheaters %>% 
+    ggplot(aes(x=ratio_adj)) + 
+    geom_histogram(aes(y=..density..),      # Histogram with density instead of count on y-axis
+                   colour="ivory4", fill="lightcyan3") +
+    geom_density(alpha=.2, fill="gold3") +  # Overlay with transparent density plot
+    ggtitle("Distribution of adjusted ratio of potential cheating") +
+    xlab("Adjusted ratio of potential cheating") + ylab("Density of players")
+plot_pred03
+```
+
+The distribution shows a left-skewed distribution with a substantial number of players centered between 10-15% of potential cheating. The median is 11.92% and the mean is 10.98% (SD=3.385018). The plot demonstrates that a large proportion of the players in the regular season cheated at least ~10% percent of the time.
+
+Focusing on the players who qualified to the championship rounds between 2018 and 2019, we now look at the predicted vs. actual regular season data points from the logistic regression model above. The results indicate that approximately 15.77% of the players are predicted to have different results than their actual answers. We also know that our model is 71.57% accurate. Then, we can approximate the number of cheaters to approximately 11.28% of the players who qualified to the championships.
+
+```{r, echo=FALSE, include=FALSE}
+df_q4 <- logit_df %>%
+  filter(user_id %in% championship$id | user_id %in% qualifiers)
+
+pred4 <- ifelse(predict(mylogit1, newdata=df_q4, type="response")>.5, 1, 0)
+```
+
+```{r, echo=FALSE}
+actualAndPredictedData4 = data.frame(actualValue = df_q4$correct,
+                                    predictedValue = pred4)
+
+actualAndPredictedData4$actualValue <- unfactor(actualAndPredictedData4$actualValue)
+
+actualAndPredictedData4$difference=as.numeric(actualAndPredictedData4$actualValue)-as.numeric(actualAndPredictedData4$predictedValue)
+
+ratio2=(nrow(filter(actualAndPredictedData4, difference == -1)) / nrow(actualAndPredictedData4)) *100
+
+
+plot4 <- actualAndPredictedData4 %>% 
+  ggplot(aes(x = row.names(actualAndPredictedData4))) +
+    geom_point(aes(y = predictedValue, color="red"))
+
+plot4
+```
+
+## Question 5:
+Looking at the data of players who qualified to the 2020 championships, we can predict their performance in the first two rounds of the championship. This will help us predict who will qualify to the final two rounds. In order to estimate an accurate number of correct answers, we divide the players to: 1) Those who qualified the first time to the championships vs. those who have qualified before (i.e. in 2018 and 2019), and 2) Those who potentially cheated in the regular rounds vs. those whose performance was consistent.
+
+### Experience of the player: First time qualifiers:
+Out of the 504 participants in championship round, 338 participants are first-time qualifiers (i.e. approximately 67.1% of the players qualified to the championships for the first time). From these 338 participants, we identify those who may have potentially cheated using the data points collected from Question 4 (see above for further details on assumptions and identification). We plot the distribution of the adjusted potential ratio of cheating for the players who qualified to the championships for the first time in 2020:
+
+```{r, echo=FALSE, include=FALSE, eval=TRUE}
+'%!in%' <- function(x,y)!('%in%'(x,y))
+
+first_time <- qualifiers %>% 
+  filter(id %!in% Y19_num  & id %!in% Y18_num)
+```
+
+```{r, echo=FALSE}
+cheaters_first_time <- first_time %>% 
+  filter(id %in% cheaters$user_id)
+
+cheaters_first <- cheaters %>% filter(user_id %in% cheaters_first_time$id)
+
+plot_first_cheat <- cheaters_first %>% 
+    ggplot(aes(x=ratio_adj)) + 
+    geom_histogram(aes(y=..density..),      # Histogram with density instead of count on y-axis
+                   colour="ivory4", fill="lightcyan3") +
+    geom_density(alpha=.2, fill="gold3") +  # Overlay with transparent density plot
+    ggtitle("Distribution of adjusted ratio of potential cheating") +
+    xlab("Adjusted ratio of potential cheating") + ylab("Density of players")
+plot_first_cheat
+```
+
+The distribution is right-skewed with a substantial number of players potentially cheating less than 5.0% of the time. The median is 3.14% and the mean is 3.45% (SD=1.708649). Thus, we determine the threshold for cheating at 5.0% cutoff in adjusted ratio of potential cheating. Below this threshold, it is more likely that players got an answer correctly when they were predicted to answer incorrectly by chance.
+
+```{r, echo=FALSE, include=FALSE}
+actual_cheaters <- cheaters_first %>% filter(ratio_adj > 5.0)
+results_acutal_cheaters <- logit_df %>% filter(user_id %in% actual_cheaters$user_id)
+```
+
+Using the threshold, we identify 62 players who qualified to the championships for the first time who may have cheated in the regular round. In the following estimation, we adjust their performance in the regular season by the accuracy-adjusted ratio of potential cheating. 
+
+```{r, echo=FALSE, include=FALSE, eval=TRUE}
+results_acutal_cheaters$year <- as.factor(results_acutal_cheaters$year)
+names(results_acutal_cheaters)[names(results_acutal_cheaters) == "avg"] <- "average_question"
+
+results_acutal_cheaters <- results_acutal_cheaters %>% 
+  mutate(average_player = average_player - 0.19186)
+  
+results_acutal_cheaters_join= join(results_acutal_cheaters,actual_cheaters, by = c("user_id" = "user_id"))
+
+results_acutal_cheaters_join <- results_acutal_cheaters_join %>% 
+  filter(year==2018 | year==2019) %>% 
+   mutate(average_player = average_player * (1-(ratio_adj/100)))
+
+pred_actual_cheat <- ifelse(predict(mylogit2_1, newdata=results_acutal_cheaters_join, type="response")>.5, 1, 0)
+
+confusionMatrix(data=as.factor(pred3), as.factor(df_rf_test$correct))
+
+cheaters_join_final <- results_acutal_cheaters_join %>% 
+  select(user_id, average_player) %>% 
+  group_by(user_id)
+
+cheaters_join_final <- unique(cheaters_join_final)
+
+cheaters_join_final$number_questions = round(cheaters_join_final$average_player * 24)
+
+cheaters_join_final <- cheaters_join_final %>% select(user_id, number_questions) 
+
+write.csv(cheaters_join_final,"part1.csv", row.names = TRUE)
+```
+
+We now estimate the number of correct answers for the 275 first-time players who were less likely to cheat. Although we still adjust for their performance in the championships, we do not adjust by the ratio of potential cheating. We obtain the following results^[We use the adjusted regular season data for these predictions since we do not have historical performance data points from championships on first-time players]:
+
+```{r, echo=FALSE, include=FALSE}
+non_cheaters <- cheaters_first %>% filter(ratio_adj <= 5.0)
+
+results_non_cheaters <- logit_df %>% filter(user_id %in% non_cheaters$user_id)
+
+names(results_non_cheaters)[names(results_non_cheaters) == "avg"] <- "average_question"
+
+results_non_cheaters <- results_non_cheaters %>% 
+  mutate(average_player = average_player - 0.19186)
+
+results_non_cheaters_join= join(results_non_cheaters,non_cheaters, by = c("user_id" = "user_id"))
+
+results_non_cheaters_join <- results_non_cheaters_join %>% 
+  select(user_id, average_player) %>% 
+  group_by(user_id)
+
+results_non_cheaters_join_final <- unique(results_non_cheaters_join)
+
+results_non_cheaters_join_final$number_questions = round(results_non_cheaters_join_final$average_player * 24)
+
+results_non_cheaters_join_final <- results_non_cheaters_join_final %>% select(user_id, number_questions) 
+
+write.csv(results_non_cheaters_join_final,"part2.csv", row.names = TRUE)
+```
+
+### Experience of the players: Recurring participants:
+Out of the 504 participants in championship round, 166 participants are recurring qualifiers (i.e. approximately 32.9% of the players qualified to the championships at least one other time). Out of the 166 recurring participants, 47 have participated to the 2018 *and* 2019 championships (i.e. approximately 32.9% of the recurring players have participated in at least two other championships). By assumption, the players who participated in the championships in both 2018 and 2019 did not cheat. We predict the number of answers below^[We use the championship data for these predictions since we have historical performance data points on recurring players]:
+
+```{r, echo=FALSE, include=FALSE}
+recurring_multiple <- qualifiers %>% 
+  filter(id %in% Y19_num  & id %in% Y18_num)
+```
+
+```{r, echo=FALSE, include=FALSE}
+results_recurring_multiple <- logit_df_champ %>% filter(id %in% recurring_multiple$id)
+
+results_recurring_multiple <- results_recurring_multiple %>% 
+  select(id, average_player) %>% 
+  group_by(id)
+
+results_recurring_multiple$number = round(results_recurring_multiple$average_player * 24)
+  
+results_recurring_multiple <- unique(results_recurring_multiple)
+
+results_recurring_multiple  <- results_recurring_multiple  %>% select(id, number) 
+
+write.csv(results_recurring_multiple ,"part3.csv", row.names = TRUE)
+```
+We now plot the distribution of the ratio of potential cheating committed by recurring players who qualified only one time in the past. We obtain the following plot:
+
+```{r, echo=FALSE, include=TRUE}
+recurring_one <- qualifiers %>% 
+  filter((id %in% Y19_num  | id %in% Y18_num) & (id %!in% recurring_multiple$id))
+
+cheaters_recur_time <- recurring_one %>% 
+  filter(id %in% cheaters$user_id)
+
+cheaters_recur_time <- cheaters %>% filter(user_id %in% cheaters_recur_time$id)
+
+plot_recur_cheat <- cheaters_recur_time %>% 
+    ggplot(aes(x=ratio_adj)) + 
+    geom_histogram(aes(y=..density..),      # Histogram with density instead of count on y-axis
+                   colour="ivory4", fill="lightcyan3") +
+    geom_density(alpha=.2, fill="gold3") +  # Overlay with transparent density plot
+    ggtitle("Distribution of adjusted ratio of potential cheating") +
+    xlab("Adjusted ratio of potential cheating") + ylab("Density of players")
+
+plot_recur_cheat
+
+plot_recur_cheat_yes <- cheaters_recur_time %>% filter(ratio_adj > 5)
+```
+
+The plot demonstrates that the majority of the players who participated in at least one championship have a low ratio (below the 5.0% threshold) of potential cheating. For those players, we do not adjust for the potential of cheating in the regular round^[Only two recurring championship players had an adjusted ratio of potential cheating above the 5.0% threshold. Though the procedure of calculation is not shown below, the final result accounts for the potential cheating]. We obtain the following results:
+
+```{r, echo=FALSE, include=FALSE}
+results_recurring_one <- logit_df_champ %>% filter(id %in% cheaters_recur_time$user_id)
+
+results_recurring_one <- results_recurring_one %>% 
+  select(id, average_player) %>% 
+  group_by(id)
+
+results_recurring_one$average = round(results_recurring_one$average_player * 24)
+
+results_recurring_one <- unique(results_recurring_one)
+
+results_recurring_one <- results_recurring_one %>% select(id, number) 
+
+write.csv(results_recurring_one ,"part4.csv", row.names = TRUE)
+```
+

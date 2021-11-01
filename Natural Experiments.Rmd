@@ -1,0 +1,413 @@
+---
+title: "Assignment 2"
+author: "Aya Somai"
+date: "26/04/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, comment=NA, message=FALSE, warning=FALSE, fig.width=10, fig.height=10)
+```
+
+```{r, message=FALSE, warning=FALSE,echo=FALSE}
+library(sf)
+library(raster)
+library(dplyr)
+library(ggplot2)
+library(leaflet)
+library(tmap)
+library(usmap)
+library(maps)
+library(sf)
+library(plotly)
+library(ggthemes)
+library(tidyr)
+library(ggpubr)
+library(coefplot)
+```
+
+
+```{r, echo=FALSE, warning=FALSE, include=FALSE}
+setwd("~/Desktop/Aya Somai - Desktop/ECON 21300 : Data Construction and Interpretation in Economic Applications/Assignment 2")
+state_data <- read.csv("states.csv")
+df <- state_data
+```
+
+## Question 1: Possible causal effects of marijuana legalization
+Before we engage in the analysis of how marijuana can impact traffic fatalities, we need to examine the leading causes of traffic fatalities and theorize on how marijuana intake can be related to these causal channels. It is difficult to identify the direct causal effect of marijuana on car accidents since there exists multiple confounding factors, i.e. a factor that influences both the independent variable (e.g. driving performance) and the dependent variable (e.g. traffic fatalities).
+
+When a traffic accident is not caused by a technical problem, traffic fatalities usually happen when a driver is not able to respond to external stimuli in a timely manner. Intoxicating substances including, but not limited to, alcohol and marijuana inhibit the individual's ability to detect - and respond to - stimuli in their environment. Moreover, intoxicating substances can impair the driver's sensorimotors such as their judgment on their driving speed and the distance between vehicles. However, it remains difficult to identify and control for each neurobiological variable associated with driving performance and test the psychoactive effect of marijuana on each one of them. We will simply refer to these unobserved variables simply as "motor skills".
+
+On another note, it is interesting to note that many people who drink while driving are also likely to consume other intoxicating substances such as marijuana. If not taken into account, this can potentially cause omitted variable bias (OVB) in our estimation of the causal effect. Since consuming marijuana is positively correlated with consuming alcohol and other substances (i.e. Corr(marijuana, other) $\geq$ 0) and other intoxicants are positively associated with traffic fatalities (i.e. $\beta$ $\geq$ 0) the bias is upwards (towards a more positive or a less negative value). Nonetheless, the reverse case can also occur whereby people who consume marijuana would refrain from consuming other substances. In this case, Corr(marijuana, other) $\leq$ 0 and the bias is downwards (towards a more negative or a less positive value). The relative effect of marijuana intake on the consumption of other intoxicating substances remains to be investigated.
+
+**Estimation of sign and magnitude:** In 2018, there were approximately 36,835 traffic fatalities nationally.^[Fatality Analysis Reporting System, available at https://www.nhtsa.gov/crash-data-systems/fatality-analysis-reporting-system4] If 30% of these drivers had BACs of .08 g/dL or higher, and about 20% of these individuals also consumed marijuana, then approximately 2210 traffic fatalities may be caused by the consumption of marijuana.
+
+Another confounding factor is age. Marijuana use is usually associated with young people in early-to-late 20s. Depending on the level of social norms in relation to marijuana use, initiation to marijuana can start in early high school years. Since the legal age of driving in the United States is 16 years old, young people are likely to experience psychoactive effects of marijuana when they are new to driving. The lack of driving experience for young people can be associated with traffic accidents. Motor vehicle crashes are a leading cause of death for 15- to 20-year-olds, according to the Centers for Disease Control and Prevention.^[Centers for Disease Control and Prevention’s web-based Injury Statistics Query and Reporting System, available at
+https://webappa.cdc.gov/sasweb/ncipc/leadcause.html] Apart from the lack of driving experience, young people may engage in risky behavior such as exceeding the speed limit, disregarding safety precautions (e.g. wearing a seatbelt), and driving under influence. According to the National Highway Traffic Safety Administration (NHTSA), 24% of young drivers 15 to 20 years old who were killed in crashes in 2018 had blood alcohol concentrations (BACs) of .01 g/dL or higher and 82% of those young drivers had alcohol in their systems also had BACs of .08 g/dL or higher.^[U.S. Department of Transportation, National Highway Traffic Safety Administration 2018 Data, published October 2020, available at https://crashstats.nhtsa.dot.gov/Api/Public/ViewPublication/812753] Similar data on marijuana concentration levels for drivers involved in traffic fatalities is limited due to the lack of standard testing and reporting protocols across states.
+
+**Estimation of sign and magnitude:** Let us say at 15%-20% of annual traffic fatalities across the U.S. are drivers between the age of 15- and 20-years-old. If 25% of these individuals also consumed marijuana, then approximately 11612 traffic fatalities may be caused by the consumption of marijuana.
+
+## Question 2: Natural experiment research design on marijuana legalization
+A natural experiment, also called a "quasi-experiment" is a form of randomized experiment introduced due to a institutional change in policy, geographic borders, extreme climate events, etc.
+In the past decade, states have been debating, changing and implementing new legislation in regard to marijuana decriminalization and legalization. This change in legislature offers a natural experiment to estimate the effect of legalizing marijuana on traffic fatalities by examining the before-after data in states where marijuana became legal and using the counterfactual data from states where marijuana remained illegal. Using a difference-in-differences approach, we can estimate the effect of marijuana legalization on traffic fatalities while controlling for other factors such as state-specific population demographics, socio-economic and traffic characteristics.
+We will evaluate the traffic fatalities data pre- and post-recreational marijuana legalization in Washington and Colorado, the first two states to enact changes to personal possession and consumption of marijuana by adults. However, there are important research design elements to consider in this ideal natural experiment setting:
+
+### Decriminilization vs. legalization, medical vs. recreational use
+To begin with, it is crucial to identify the specific policy that *substantially* impacts the state residents' ability to obtain and consume marijuana. Thus, we need to clarify the difference between the different legal instruments (i.e. decriminalization vs. legalization) and their prospective use (medical vs. recreational). Decriminalization means that a state can make a certain act criminal but not subject to prosecution. Each state determines the specific amount a person is able to hold in possession without facing prosecution or major consequences such as receiving a criminal record or serving jail time. Even though the marijuana legalization debate took a different turn in the past decade, efforts to decriminalize it date back to 1973. On the other hand, legalizing the medical use of marijuana started in 1996 with California in the lead and other states following suit. However, states place strict regulations and limitations on the obtention and possession of marijuana either as a quota on the amount or on the number of days a permit of purchase can be used by a patient. For instance, Massachusetts and Connecticut have a 30- to 60- day limit that varies from one patient to another. Illinois, on the other hand, specifies the laws on personal agricultural cultivation of marijuana.^[*Marijuana Legalization and Decriminalization Overview*, Last updated January 29, 2019, available at https://www.findlaw.com/criminal/criminal-charges/marijuana-legalization-and-decriminalization-overview.html]
+
+Although these steps that states took over the years can be associated with an easier access to - and larger supply of - marijuana, it is the legalization of the recreational use of the drug that played a major role. It can also be argued that decriminalization and legalization of the medical use of marijuana changed the social sentiment and attitude towards the possession and consumption of the psychoactive drug. However, many states implemented strict rules, regulations and quotas as a form of a "red tape". State residents are much more likely to purchase and consume marijuana recreational when there are no threats of being arrested, fined or convicted as long as they are 21-years-old and hold the legal amounts of the drug.
+
+### Timing
+After implementing a policy change, the use of recreational marijuana takes a considerable amount of time in order to observe its effect on changed behavior within state residents. First of all, the production and cultivation of marijuana may take 3 to 6 months on average. This does not include the time it takes to distribute, transport and sell in retail stores (e.g. dispensaries). Moreover, obtaining the licenses and permits to cultivate and sell marijuana differ in processing time and complexity from state to state.^[*Marijuana Business: Licenses, Permits, and Planning* available at https://public.findlaw.com/cannabis-law/starting-a-cannabis-business/marijuana-business-licenses-permits-and-planning.html] For instance, licensed sales in Washington and Colorado did not start until July 8, 2014 and January 1, 2014 respectively even though they had legalized recreational use of marijuana in 2012. States that followed suit in legalizing marijuana took approximately 2 years on average to license the sale of the drug. For example, Maine passed the legislation in January 2017 and did not grant a sale license until October 2020. In fact, out of the 18 U.S. states that legalized marijuana so far (excluding the outer islands and territories), only Oregon, Nevada and Illinois legalized the sale of marijuana the same year its consumption and possession became legal. Keeping these factors in mind, we will examine the data 3 years before and after the date of legalization within the state. This will also help show any year-over-year trends in traffic fatalities prior to legalizing recreational marijuana.
+
+### Control group in the research design
+Choosing a control group as an adequate counterfactual can be intricate. Each state is characterized by a set of social, economic, environmental and legal elements that can influence both the effect of marijuana legalization on the use of the drug within the state population (e.g. state-level population demographics, social attitude towards marijuana, per-capita alcohol consumption, etc.) as well as factors associated with traffic fatalities (e.g. the state budget on road maintenance, road density, change in climate, etc.).
+
+Many research experiments exploiting the natural setting of change in state-level policy choose the control group as a neighboring state that is adjacent in geography and thus, closer in some characteristics (e.g. environment and climate). However, this may not be reliable since residents of neighboring states can easily cross the borders to another state where marijuana is legal in order to purchase the drug. In this case, it is difficult to quantify the interstate spillover effect and our estimates may be biased. Moreover, there remains other factors that differ between neighboring state that we can not control for, such as built-up sentiment in regards to drug use and the incidence of traffic fatalities due to intoxication.
+
+In order to eliminate any upward bias related to positive social sentiment towards the consumption of marijuana and/or the relatively easier access to purchase the drug, we will focus on states where both the medical and recreational use remains fully illegal^[This does not take into consideration rationed CBD oil use in Georgia (less than 5% THC), Idaho (less than 0.1% THC), Indiana (less than 0.3% THC), Iowa (less than 3% THC), Kansas (containing 0% THC), Kentucky (not clearly stated), South Carolina (less than 0.9% THC), Texas (no more than 0.5% THC and no less than 10% CBD), Wisconsin (not clearly stated), and Wyoming (not clearly stated).]. According the latest 2021 data, these states are Alabama, Georgia, Idaho, Indiana, Iowa, Kansas, Kentucky, Nebraska, Missouri, North Carolina, South Carolina, Tennessee, Texas, Wisconsin and Wyoming. However, some of these states took steps to decriminalize marijuana use. These include North Carolina, Nebraska, and some counties within Georgia. We will exclude these three states since easing or removing criminal sanctions against the possession of marijuana under a certain amount can change the social behavior related to marijuana use even when it remains illegal. Discussion on the specific choice of the control group states follows in the next section.
+
+### Policy endogeneity
+A common issue to consider in choosing state-level policy as a natural experiment setting is policy endogeneity. The quasi-experiment assumes that change in state legislature in exogenous to other variables. However, state interventions are usually related to economic, political and social factors. For instance, legalizing marijuana use can be associated with the political strategy of state legislators and the change in the political composition of state residents. For instance, the state may enact economic and fiscal policies to attract younger populations who have a different attitude towards marijuana use. Another example may be the existence of a strong lobbying power in order to legalize the use of marijuana and to organize its production, sale and distribution. The state can simultaneously implement a taxation plan on the sale of marijuana to support its budgetary expenditures (e.g. expenditure on infrastructure and road maintenance). In this case, it is necessary to identify, quantify and control for the different variables that affect the change in marijuana legislation. Failing to account for these variables may lead to a biased estimate of the effect of marijuana legalization on traffic fatalities.
+
+## Question 3: Natural experiment research design on marijuana legalization
+### Data on traffic fatality death rates
+The National Highway Traffic Safety Administration started collecting and publishing census data on fatal traffic crashes within 50 States, the District of Columbia and Puerto Rico starting in 1975. This census, formally known as the Fatality Analysis Reporting System (FARS) includes fatal crashes for motor vehicles only, i.e. a crash needs to involve a motor vehicle on a public traffic road and result in the death of the person(s) involved in the accident (occupant or non-occupant) within 30 days of the traffic accident. The data is collected, standardized and organized from each state's publicly available data such as police accident reports, state highway department data, state driver licensing files and emergency medical service reports.^[Fatality Analysis Reporting System, available at https://www.nhtsa.gov/crash-data-systems/fatality-analysis-reporting-system]
+
+However, this data limits our analysis up to the year 2019. Since the reporting system takes a substantial amount of time and resources to gather, organize and standardize a comprehensive set of data from all states, the current time-lag on the national database is approximately 2 years. This means we are unable to run our analysis on states which recently legalized marijuana: Illinois (January 1, 2020), Arizona (November 30, 2020), Montana (January 1, 2021), New Jersey (February 22, 2021), New York (March 31, 2021), New Mexico (June 29, 2021) and Virginia (July 1, 2021). In addition, this shortens our chosen six-year time-window of analysis for the states that legalized marijuana after 2016: Nevada (January 1, 2017), Maine (January 30, 2017), Vermont (July 1, 2018) and Michigan (December 6, 2018). For states where legalization took effect in 2017, we will be able to look at two years after "treatment". For the rest of the states where legalization occurred in 2018, we will only be able to look at data from one year after legalization.
+
+### Data at the state-year level on the legal status of marijuana
+As mentioned beforehand, we are interested in the effect of legalizing the recreational use of marijuana. In addition, it is important to keep in mind other changes in the legality of marijuana by jurisdiction in terms of decriminalization and legalization of the its medical use. The following map summarizes the current state-level status on marijuana use in 2021:
+
+```{r echo=FALSE, fig.height=5}
+plot_usmap(regions = "states", data = df , values = "Legal.Status", alpha = 0.75, color = "grey", 
+           size = 0.5, labels = TRUE, lines = "white", label_color = "white") + 
+  labs(title = "U.S. States",
+       subtitle = "Marijuana legality legislation by state in 2021") + 
+  scale_fill_discrete(name = "Legal Status")
+```
+
+For each state that legalized marijuana in the past 10 years, we graph the trend in traffic fatalities as it evolved over time (before and after legalization took effect). The year of legalization is clearly indicated in the following graphs:
+
+```{r, echo=FALSE, warning=FALSE, include=FALSE}
+#Look at the data on fatal traffic accidents between 2009 to 2015
+data2009 <- read.csv("2009ACC_AUX.csv")
+data2010 <- read.csv("2010ACC_AUX.csv")
+data2011 <- read.csv("2011ACC_AUX.csv")
+data2012 <- read.csv("2012ACC_AUX.csv")
+data2013 <- read.csv("2013ACC_AUX.csv")
+data2014 <- read.csv("2014ACC_AUX.csv")
+data2015 <- read.csv("2015ACC_AUX.csv")
+data2016 <- read.csv("2016ACC_AUX.csv")
+data2017 <- read.csv("2017ACC_AUX.csv")
+data2018 <- read.csv("2018ACC_AUX.csv")
+data2019 <- read.csv("2019ACC_AUX.csv")
+
+#For each year, group the number of accidents recorded by state
+df2009 <- data2009 %>%
+          group_by(STATE) %>%
+          summarise(count=n())
+
+df2010 <- data2010 %>%
+  group_by(STATE) %>%
+  summarise(count=n())
+
+df2011 <- data2011 %>%
+  group_by(STATE) %>%
+  summarise(count=n())
+
+
+df2012 <- data2012 %>%
+  group_by(STATE) %>%
+  summarise(count=n())
+
+
+df2013 <- data2013 %>%
+  group_by(STATE) %>%
+  summarise(count=n())
+
+
+df2014 <- data2014 %>%
+  group_by(STATE) %>%
+  summarise(count=n())
+
+df2015 <- data2015 %>%
+  group_by(STATE) %>%
+  summarise(count=n())
+
+df2016 <- data2016 %>%
+  group_by(STATE) %>%
+  summarise(count=n())
+
+df2017 <- data2017 %>%
+  group_by(STATE) %>%
+  summarise(count=n())
+
+df2018 <- data2018 %>%
+  group_by(STATE) %>%
+  summarise(count=n())
+
+df2019 <- data2019 %>%
+  group_by(STATE) %>%
+  summarise(count=n())
+
+#Merge all the data from 2009-2015 by state in one dataframe
+new_df <- Reduce(function(x,y) merge(x = x, y = y, by = "STATE"), 
+       list(df2009, df2010, df2011, df2012, df2013, df2014, df2015, df2016, df2017, df2018, df2019))
+
+#Rename the column names
+names(new_df)[1] <- "State"
+names(new_df)[2] <- "2009"
+names(new_df)[3] <- "2010"
+names(new_df)[4] <- "2011"
+names(new_df)[5] <- "2012"
+names(new_df)[6] <- "2013"
+names(new_df)[7] <- "2014"
+names(new_df)[8] <- "2015"
+names(new_df)[9] <- "2016"
+names(new_df)[10] <- "2017"
+names(new_df)[11] <- "2018"
+names(new_df)[12] <- "2019"
+
+#Pivot dataframe
+df_test <- new_df
+df_test <- pivot_longer(df_test, cols="2009":"2019", names_to = "Year", values_to = "Traffic fatalities")
+```
+
+```{r, echo=FALSE, include=FALSE}
+plot2012 <- df_test %>%
+    filter(State=="53" | State=="8") %>%
+    ggplot() +
+    geom_line(aes(x=Year, y=`Traffic fatalities`, group=as.factor(State), color=as.factor(State))) +
+    geom_vline(aes(xintercept = "2012"), color = "#69b3a2", size = 0.5, linetype="dashed") +
+    scale_color_discrete(name = "State", labels=c("Colorado", "Washington"))+
+    xlab("Year")+
+    theme(axis.title.y = element_blank())
+```
+
+```{r, echo=FALSE, include=FALSE}
+plot2015 <- df_test %>%
+    filter(State=="11" | State=="41") %>%
+    ggplot() +
+    geom_line(aes(x=Year, y=`Traffic fatalities`, group=as.factor(State), color=as.factor(State))) +
+    geom_vline(aes(xintercept = "2015"), color = "#69b3a2", size = 0.5, linetype="dashed") +
+    scale_color_discrete(name = "State", labels=c("Washington, D.C.", "Oregon"))+
+    xlab("Year")+
+    theme(axis.title.y = element_blank())
+```
+
+```{r, echo=FALSE, include=FALSE}
+plot2016 <- df_test %>%
+    filter(State=="6" | State=="25") %>%
+    ggplot() +
+    geom_line(aes(x=Year, y=`Traffic fatalities`, group=as.factor(State), color=as.factor(State))) +
+    geom_vline(aes(xintercept = "2016"), color = "#69b3a2", size = 0.5, linetype="dashed") +
+    scale_color_discrete(name = "State", labels=c("California", "Massachussetts"))+
+    xlab("Year")+
+    theme(axis.title.y = element_blank())
+```
+
+```{r, echo=FALSE, include=FALSE}
+plot2017 <- df_test %>%
+    filter(State=="32" | State=="23") %>%
+    ggplot() +
+    geom_line(aes(x=Year, y=`Traffic fatalities`, group=as.factor(State), color=as.factor(State))) +
+    geom_vline(aes(xintercept = "2017"), color = "#69b3a2", size = 0.5, linetype="dashed") +
+    scale_color_discrete(name = "State", labels=c("Nevada", "Maine"))+
+    xlab("Year")+
+    theme(axis.title.y = element_blank())
+```
+
+```{r, echo=FALSE, include=FALSE}
+plot2018 <- df_test %>%
+    filter(State=="50" | State=="26") %>%
+    ggplot() +
+    geom_line(aes(x=Year, y=`Traffic fatalities`, group=as.factor(State), color=as.factor(State))) +
+    geom_vline(aes(xintercept = "2018"), color = "#69b3a2", size = 0.5, linetype="dashed") +
+    scale_color_discrete(name = "State", labels=c("Vermont", "Michigan"))+
+    xlab("Year")+
+    theme(axis.title.y = element_blank())
+```
+
+```{r, echo=FALSE}
+allplot <- ggarrange(plot2012, plot2015, plot2016, plot2017, plot2018, 
+          labels = c("Washington and Colorado (2012)", "Oregon and Washington, D.C. (2015)", 
+                     "California and Massachussetts (2016)", "Nevada and Maine (2017)", 
+                     "Vermont and Michigan (2018)"),
+          ncol = 2, nrow = 3,
+          font.label = list(size = 10, color = "Black"),
+          heights=c(5,5,5), widths=c(5,5,5)) + rremove("y.title")
+
+annotate_figure(allplot,
+               top = text_grob("The effect of legal status of marijuana on state-year traffic fatalities",
+                               color = "Black", face = "bold", size = 16),
+               bottom = text_grob("Data source: \n Fatality Analysis Reporting System", color = "Grey",
+                                  hjust = 1, x = 1, face = "italic", size = 10),
+               left = text_grob("Number of Traffic Fatalities", color = "Black", rot = 90)
+)
+```
+
+### Conclusion:
+The observed timeseries on state-level traffic data before and after the legalization of marijuana does not show a change in trend that is analogous for all states. For instance, states such as Massachusetts, Michigan and Washington, D.C. show relatively steady levels of traffic fatalities in the time-window of interest^[Note that even though I am choosing the six-year time window to analyze the before-after effect of legalizing marijuana, the data spans over 10 years from 2009  to 2019.] (i.e. three years before and after change in legislation). Other states such as Oregon, California and Maine show an upward trend that started 6 to 8 years prior to legalizing recereational marijuana and continued at a similar rate after the change in legislation. In California and Maine, the number of traffic fatalities even seem to be decreasing after legalizing recreational marijuana. Lastly, data from Nevada and Vermont show fluctuating levels of traffic fatalities that remain centered around the average.
+
+The two states which show a sharp increase in traffic fatalities after change in legislation are Washington and Colorado. According to the timeseries, this increase happens approximately one year after legalizing marijuana. This may be due to the fact that they are the first two states to initiate a ballot measure to legalize the recreational use of marijuana. Other states following suit may have taken precautionary measures and implemented additional regulations in regard to traffic safety, driving under influence, and road infrastructure. This may be possible since there is a three-year timelag between the first legalization of recreational marijuana in 2012 and the second wave of legalization in 2015.
+
+In states where recreational marijuana was not yet legal, social behaviors and attitudes towards marijuana use may have responded earlier than the change of legislation. In reality, the change in legislation usually stems from a changed behavior and attitude of state constituents towards a certain issue (in reference to the assumption of policy endogeneity discussed above). As a result, we will focus our upcoming analysis on Washington and Colorado where there is a sharp increase in the level of traffic fatalities after policy change. This also entails that we do not have to estimate the interstate spillover effects since the two states legalized marijuana within the same time period (December 6 in Washington and December 10 in Colorado) and they are geographically separated.
+
+It is interesting to note that, for both Washington and Colorado, the rate of change in traffic fatalities remains relatively constant ~1 year after legalization, becomes positive starting in 2013 then substantially increases starting in 2014. This may be related to the fact that both states legalized the retail of marijuana in 2014, thus increasing the supply and facilitating access to the psychoactive drug. In 2017, the trendline in traffic fatalities starts to decline in each of Washington and Colorado. Public information from Colorado's legislative council records a legislative re-evaluation in 2017 on the cultivation, production, distribution, sale and consumption of marijuana.^[*Summary of Marijuana Legislation (2017)*, Legislative Council Staff,Published 12/15/2017, available at https://leg.colorado.gov/publications/summary-marijuana-legislation-2017] The presented data on traffic fatalities may have played a role in the re-evaluation of the legislative rules and regulations on recreational marijuana sale and use, and may have signaled necessary policy design for other states following their lead.
+
+## Question 4: Estimate of the causal impact of marijuana legalization
+In the following graph, we show the trend in traffic fatalities between 2009 and 2019 for Washington and Colorado in comparison to the states where marijuana remains strictly illegal. As mentioned beforehand, we exclude Georgia, Nebraska and North Carolina where marijuana has been largely decriminalized. Moreover, we do not include Texas in this data analysis since it demonstrated very high levels of traffic fatalities that signaled a potential outlier.
+
+### Using regression with interaction variable between treatment and treatment period
+Since we are using multiple observations (i.e. 2 states in the "natural treatment" group and 11 states in the control group) and multiple time periods (m~leads~ = n~lags~ = 3 years with intervention happening at t = 2012 for both states), we create an interaction term between the treatment status (i.e. D~t~ =1 if in the treatment group and 0 otherwise) and treatment period (D~p~ =1 if after treatment period and zero otherwise). This method allows us to eliminate the fixed group and time effects since the binary variables D~t~ and D~p~ capture these unmeasured differences between the states where recreational marijuana was legalized and those where it remained illegal. Under the assumption that the only interaction between time and the treatment group is the legalization of recreational marijuana, changes in the unobserved factors over time affect both groups in the same way. 
+
+After creating a new interaction term, we run the following regression:
+
+```{r, echo=FALSE}
+#Dummy variable for treatment
+df_reg <- df_test
+df_reg <- df_reg[df_reg$State != "48", ]
+df_reg$treatment <- NULL
+df_reg$treatment[df_reg$State==53 | df_reg$State==8] <- 1
+df_reg$treatment[df_reg$State==1 | df_reg$State==1 | df_reg$State==16 | df_reg$State==18 | df_reg$State==19
+                 | df_reg$State==20 | df_reg$State==21 | df_reg$State==29 | df_reg$State==45 | df_reg$State==47
+                 | df_reg$State==48 | df_reg$State==55 | df_reg$State==56] <- 0
+df_reg <- na.omit(df_reg, c("treatment"))
+```
+
+```{r, echo=FALSE}
+#Dummy variable for treatment year
+df_reg$treat_year <- 0
+df_reg$treat_year[df_reg$Year >= 2012] <- 1
+df_reg <- na.omit(df_reg, c("treatment"))
+```
+
+```{r, echo=FALSE}
+fatalities <- df_reg$`Traffic fatalities`
+treatment <- df_reg$treatment
+treatment_period <- df_reg$treat_year
+Year_all <- lm(I(fatalities ) ~ treatment + treatment_period + treatment_period * treatment, data =df_reg)
+names(Year_all$coefficients) <- c('Intercept', 'Treatment Group', 'Treatment Period', 'Marijuana legalization')
+summary(Year_all)
+```
+The results show that the point estimate of the coefficient *Marijuana Legalization* (i.e. the interaction term) is equal to 45.06 (SD=134.69). The coefficient estimate of interest is not statistically significantly different from zero at conventional significance levels with a t-statistic = 0.335 and a p-value = 0.738. I think that the magnitude of this coefficient estimate is not substantial. The average traffic fatalities *before* legalizing recreational marijuana is 432.0 in Colorado and 418.3 in Washington. This implies that the increase in traffic fatalities *after* legalization is approximately 10.4% for Colorado and 10.8% in Washington. Moreover, the coefficient plot (Appendix 1) shows that there is a high serial correlation between the legalization of marijuana (i.e. the natural treatment) and traffic fatalities (i.e. the dependent variable) over the observed time-window between 2009 and 2015.
+
+Here, there is a possibility that our previous assumption (i.e. the legalization of marijuana is the only interaction between time and the treatment group) does not hold. In order to put this in perspective, we briefly explore a different metric on traffic fatalities that is recurrent in state- and federal-level reports: Fatality Rate per 100 Million Vehicle Miles Traveled. Instead of observing the changes in levels, this metric calculates the ratio of total number of fatalities to the number of vehicle miles traveled (VMT, in 100 Million VMT) within a certain year. We plot the each of the observed states where recreational marijuana became legal (Washington and Colorado) with the respective control group states where there was a parallel trend pre-legalization. We obtain the following results:
+
+```{r, echo=FALSE, include=FALSE}
+col_mean = mean(df_reg$`Traffic fatalities`[df_reg$State==53 & df_reg$Year<2012])
+col_mean
+wash_mean = mean(df_reg$`Traffic fatalities`[df_reg$State==8 & df_reg$Year<2012])
+wash_mean
+```
+
+```{r, echo=FALSE, warning=FALSE, include=FALSE}
+rate <- read.csv("Rate.csv")
+
+names(rate)[3] <- "2008"
+names(rate)[4] <- "2009"
+names(rate)[5] <- "2010"
+names(rate)[6] <- "2011"
+names(rate)[7] <- "2012"
+names(rate)[8] <- "2013"
+names(rate)[9] <- "2014"
+names(rate)[10] <- "2015"
+names(rate)[11] <- "2016"
+names(rate)[12] <- "2017"
+names(rate)[13] <- "2018"
+
+df_rate <- pivot_longer(rate, cols="2008":"2018", names_to = "Year", values_to = "Fatality Rate")
+```
+
+```{r, echo=FALSE, fig.align='center', fig.height=5}
+df_rate %>%
+  filter(Year >= "2008" & Year <="2015") %>%
+  filter(State=="Colorado" | State=="South Carolina" | State=="Alabama"  | State=="Indiana" ) %>% 
+  ggplot() +
+  geom_line(aes(x=Year, y=`Fatality Rate`, group=State, color=State)) +
+  geom_vline(aes(xintercept = "2012"), color = "#69b3a2", size = 0.5, linetype="dashed") +
+  scale_color_discrete(name = "State") +
+  xlab("Year") +
+  ylab("Fatality Rate per 100 Million Vehicle Miles Traveled")
+```
+
+```{r, echo=FALSE, fig.align='center', fig.height=5}
+df_rate %>%
+  filter(Year >= "2008" & Year <="2015") %>%
+  filter(State=="Washington" | State=="Missouri" | State=="Kentucky") %>% 
+  ggplot() +
+  geom_line(aes(x=Year, y=`Fatality Rate`, group=State, color=State)) +
+  geom_vline(aes(xintercept = "2012"), color = "#69b3a2", size = 0.5, linetype="dashed") +
+  scale_color_discrete(name = "State") +
+  xlab("Year") +
+  ylab("Fatality Rate per 100 Million Vehicle Miles Traveled")
+```
+The results demonstrate that, when we take into consideration the number of vehicle miles traveled (VMT) within a state, the incidence of traffic fatalities in Washington and Colorado follow a similar trend line in comparison to states where marijuana remained illegal. Congruent with our previous analysis, the ratio of traffic fatalities increased for each of the states in the treatment group in 2013 (~1 year after legalization) and remained high in 2014 (~2 years after treatment). However, the same pattern is observed over this time period for states in the control group.
+
+## Question 5
+Our analysis demonstrates that state-level legalization of recreational marijuana does not significantly affect the incidence of traffic fatalities. Our pooled data on traffic fatalities between 2009 and 2015 from Washington and Colorado (i.e. treatment group) does not significantly differ from states where the use and possession of marijuana remains both illegal and criminalized (i.e. control group).
+
+From a public policy perspective, it is not the act of legalizing recreational marijuana that has a direct and immediate causal effect on the observed surge in traffic fatalities but other confounding factors occurring contemporaneously. State and local legislative branches have to investigate these potential factors in order to implement the adequate legal and operational framework which ensures the safety of the drivers. For instance, as mentioned in Question 1, there may be a confounding variable associated with the age of the drivers involved in traffic accidents. A follow-up study can analyze whether there is a considerable change in the ratio of traffic fatalities by age bucket within the past decade.
+
+In relation to marijuana legalization, state legislators need to continue and enhance their efforts in investigating the effect of recreational marijuana on traffic safety. To begin with, there needs to be a standardized testing, recording and reporting protocol on THC levels for drivers involved in traffic accidents. This may provide an answer to the issue posed in Question 1 on the possibility that individuals who drink while driving may also consume other intoxicating substance. More importantly, states need to collect data on the growth or decline in the different sale avenues available to marijuana consumers (i.e. licensed retail vs. the black market) and the legal framework of consumption (i.e. recreational vs. medical marijuana). This may help understand whether legalization had a substantial effect on the increase in the supply, price, quality and accessibility of marijuana on recreational users.
+
+On the other hand, state legislators can explore tax policy on recreational marijuana that is sold is state-licensed retail stores (e.g. dispensaries). These tax revenues can support state and local budgets and expenditures on infrastructure maintenance, education (including educational programs on responsible consumption of recreational marijuana) and other projects.
+
+## Question 6
+The following graphs summarize our findings yet show each treatment state with the control states with a parallel trend line in the ratio of traffic fatalities prior to the legalization of recreational marijuana:
+
+```{r, echo=FALSE, fig.align='center', fig.height=5}
+df_test %>%
+  filter(Year >= "2008" & Year <="2015") %>%
+  filter(State=="53" | State=="45" | State=="1"  | State=="18" ) %>% 
+  ggplot() +
+  geom_line(aes(x=Year, y=`Traffic fatalities`, group=as.factor(State), color=as.factor(State))) +
+  geom_vline(aes(xintercept = "2012"), color = "#69b3a2", size = 0.5, linetype="dashed") +
+  scale_color_discrete(name = "State") +
+  xlab("Year") +
+  ylab("Traffic Fatalities")
+```
+
+```{r, echo=FALSE, fig.align='center', fig.height=5}
+df_test %>%
+  filter(Year >= "2008" & Year <="2015") %>%
+  filter(State=="8" | State=="29" | State=="21") %>% 
+  ggplot() +
+  geom_line(aes(x=Year, y=`Traffic fatalities`, group=as.factor(State), color=as.factor(State))) +
+  geom_vline(aes(xintercept = "2012"), color = "#69b3a2", size = 0.5, linetype="dashed") +
+  scale_color_discrete(name = "State") +
+  xlab("Year") +
+  ylab("Traffic Fatalities")
+```
+
+
+## Appendix 1
+
+```{r, echo=FALSE, include=FALSE}
+#Subset data by year
+reg_data09 <- df_reg[ which(df_reg$Year=='2009'), ]
+reg_data10 <- df_reg[ which(df_reg$Year=='2010'), ]
+reg_data11 <- df_reg[ which(df_reg$Year=='2011'), ]
+reg_data12 <- df_reg[ which(df_reg$Year=='2012'), ]
+reg_data13 <- df_reg[ which(df_reg$Year=='2013'), ]
+reg_data14 <- df_reg[ which(df_reg$Year=='2014'), ]
+reg_data15 <- df_reg[ which(df_reg$Year=='2015'), ]
+```
+
+```{r, echo=FALSE, include=FALSE}
+Year2009 <- lm(I(reg_data09$`Traffic fatalities`) ~ reg_data09$treatment, data =reg_data09)
+Year2010 <- lm(I(reg_data10$`Traffic fatalities`) ~ reg_data10$treatment, data=reg_data10)
+Year2011<-lm(I(reg_data11$`Traffic fatalities`) ~ reg_data11$treatment, data =reg_data11)
+Year2012 <- lm(I(reg_data12$`Traffic fatalities`) ~ reg_data12$treatment, data =reg_data12)
+Year2013 <- lm(I(reg_data13$`Traffic fatalities`) ~ reg_data13$treatment, data=reg_data13)
+Year2014 <- lm(I(reg_data14$`Traffic fatalities`) ~ reg_data14$treatment, data =reg_data14)
+Year2015 <- lm(I(reg_data15$`Traffic fatalities`) ~ reg_data15$treatment, data =reg_data15)
+```
+
+```{r, echo=FALSE}
+multiplot(Year2009,Year2010,Year2011,Year2012, Year2013, Year2014,Year2015, single = FALSE, intercept = FALSE) + coord_flip() + labs(labels = c("(2009)", "(2010)", "(2011)", "(2012)", "(2013)", "(2014)", "(2015)"), y="Year" )  + theme(
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.position = "none")                         
+```
