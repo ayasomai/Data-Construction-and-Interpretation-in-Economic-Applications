@@ -1,0 +1,598 @@
+---
+title: 'ECON 21300: Assignment 1'
+author: "Aya Somai"
+date: "04/12/2021"
+output:
+  pdf_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, comment=NA, message=FALSE, warning=FALSE, fig.width=10, fig.height=6)
+```
+
+```{r, message=FALSE, warning=FALSE,echo=FALSE}
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+library(stargazer)
+library(tinytex)
+```
+
+```{r, echo=FALSE}
+setwd("~/Desktop/Aya Somai - Desktop/ECON 21300 : Data Construction and Interpretation in Economic Applications/PSET1")
+mydata <- read.csv("assignment_1_data.csv")
+```
+
+```{r, echo=FALSE}
+df <- mydata
+```
+
+## Question 1
+In order to estimate the average treatment effect (ATE), we can use two main methods. The first method uses the quasi-experimental data and compares the difference in outcomes (i.e. average test scores) between the treatment group (i.e. students who attend LLS) and the counter-factual control group (i.e. students who do not attend LLS). Another way of estimating the treatment effect is by running a simple linear regression whereby the coefficient on the dummy variable of treatment (*d~i~* = 1 if treated and *d~i~* = 0 if untreated) equals to the estimated ATE.
+
+To obtain an unbiased estimate of the ATE, there needs to be a unit-level randomization; in this case, the participation in the treatment is determined by a lottery. We can assume that there is a balance in the students' individual characteristics such as economic background, social status, gender, ethnicity, academic ability, motivation, etc. While some of these variables are directly observed (e.g. distance from school, income bucket, gender, race, and playing sports) other variables remain unobserved. A further discussion of the balance between the treatment and control groups will follow. The next two methods will assume that the data is randomized (no selection bias) and without errors in collection and measurement (no data cleaning required). We do not have to account for other issues such as partial compliance o attrition since every student who wins the lottery attends LLS and is assumed to remain in the school during the entirety of the treatment.
+
+Before calculating ATE, we run a simple linear regression on the treatment effect of attending LLS and obtain 5.805 (SD = 3.367). The coefficient estimate is statistically significantly different from zero at 10% significance level with a t-statistic of 1.724 and a p-value of 0.0847. This result is consistent with the difference in post-treatment test score means of students in the treatment and control group (details shown below in Method 1). Note that this estimate does not take into account the pre-treatment difference in means between those who won the lottery and those who did not. The following steps take this difference into account.
+
+```{r, echo=FALSE}
+mydata$treatment <- NULL
+mydata$treatment[mydata$lab==1] <- 1
+mydata$treatment[mydata$lab==0] <- 0
+```
+
+```{r, echo=FALSE}
+treatment <- mydata$treatment
+reg0 <- lm(I(mydata$score) ~ treatment)
+names(reg0$coefficients) <- c('Intercept','Treatment')
+summary(reg0)
+```
+
+### Method 1: Using difference in means between treatment and control group
+
+We start by calculating the pre-treatment average test scores (*past_score*) for the treatment (*lab* = 1) and control groups (*lab* = 0). We obtain test~pre,1~ = 7.683 for the treatment group and test~pre,0~ = 8.142 for the control group. The pre-treatment difference in average test scores diff~pre~ = test~pre,1~ - test~pre,0~ = -0.459.
+
+```{r, echo=FALSE}
+#Before treatment
+treat_before_mean = mean(mydata$past_score[mydata$lab==1])
+treat_before_mean
+
+control_before_mean = mean(mydata$past_score[mydata$lab==0])
+control_before_mean
+```
+
+We now calculate the post-treatment average test scores (*score*) for the treatment (*lab* = 1) and control groups (*lab* = 0). We obtain test~post,1~ = 40.424 for the treatment group and test~post,0~ = 36.619 for the control group. The pre-treatment difference in average test scores diff~post~ = test~post,1~ - test~post,0~ = 5.805.
+
+```{r, echo=FALSE}
+#After treatment
+treat_after_mean = mean(mydata$score[mydata$lab==1])
+treat_after_mean
+
+control_after_mean = mean(mydata$score[mydata$lab==0])
+control_after_mean
+```
+
+Finally, we estimate the average treatment effect by taking the difference-in-difference = diff~post~ - diff~pre~ = 6.264.
+
+```{r, echo=FALSE}
+diff_in_diff = (treat_after_mean-control_after_mean) - (treat_before_mean-control_before_mean)
+diff_in_diff
+```
+
+### Method 2: Using regression with indicator variable for treatment 
+
+After creating a new indicator variable for treatment (*treatment*), we regress the difference in post-pre test scores for each observation on the treatment status. The output of the simple linear regression indicates the same value obtain in Method 1 with an average treatment effect equal to 6.264. The coefficient of the difference estimator is statistically significantly different from zero at 10% significance level with a t-statistic = 1.861 and a p-value = 0.0627 (SD = 3.365).
+
+
+```{r, echo=FALSE}
+diff_score <- mydata$score - mydata$past_score
+treatment <- mydata$treatment
+reg1 <- lm(I(diff_score) ~ treatment)
+names(reg1$coefficients) <- c('Intercept','Treatment')
+summary(reg1)
+```
+
+These results do not seem plausible since there seems to be a large variation in the outcome of interest. Moreover, there is a noticeable difference in the magnitude of average test scores before and after treatment for both those who won and did not win the lottery. This indicates a likelihood of a measurement error or a scaling error when data was collected.
+
+## Question 2
+In order to identify effective ways to clean the data, we will explore each variable separately and determine potential errors in measurement which we will rectify accordingly.
+
+### 2.1 Pre- and Post-treatment Test Scores
+It seems that the pre-treatment test scores (*past_score*) are normally distributed with a mean value equal to 8.003646 and a standard deviation of 1.411303.
+
+
+```{r, echo=FALSE}
+mean(df$past_score)
+sd(df$past_score)
+```
+
+However, the post-treatment test scores seem unreasonable in their distribution with some values attaining a maximum of 13609.374. The average test score is 36.30224 with a large standard deviation of 152.0386. We use a scatter plot to show the different concentration and variation of values on a larger scale. 
+
+```{r, echo=FALSE}
+mean(df$score)
+sd(df$score)
+```
+
+```{r, echo=FALSE}
+df %>% 
+  ggplot(aes(past_score)) +
+  geom_histogram(alpha=0.75, color="grey", position = "identity") +
+  scale_color_manual(values = c("#00AFBB", "#E7B800"), guide = FALSE) +
+  xlab("Pre-treatment test scores") +
+  ylab("Number of students")
+```
+
+```{r, echo=FALSE}
+df %>% 
+  ggplot(aes(x=score, y=student_id)) +
+  geom_point(
+    color="black",
+    fill="#69b3a2",
+    shape=22,
+    alpha=0.5,
+    size=0.5,
+    stroke = 1
+  ) 
+```
+
+The data points for some observations seem to be out-of-scale. We thus re-scale these identified values by dividing them by 100. Reevaluating the distribution after re-scaling, we obtain the following histogram:
+
+```{r, echo=FALSE}
+#2.4 Rescale the after treatment test scores
+df$score <- if_else(df$score>100, df$score/100, df$score)
+
+df %>% 
+  ggplot(aes(score)) +
+  geom_histogram(alpha=0.75, color="grey", position = "identity", binwidth = 0.5) +
+  scale_color_manual(values = c("#00AFBB", "#E7B800"), guide = FALSE) +
+  xlab("Post-treatment test scores") +
+  ylab("Number of students")
+```
+
+### 2.2 Family Income & Income Buckets
+
+We begin by plotting the distribution of family income for all students prior to data cleaning:
+
+```{r, echo=FALSE, fig.height = 6, fig.width = 12}
+df %>% 
+  ggplot(aes(income)) +
+  geom_histogram(binwidth = 10000, alpha=0.75, color="grey", position = "identity") 
+```
+
+From the histogram, we can see that there are negative income values below zero. We then delete these observations which indicate an error in the data collection. It is important to note that for each observation with a negative income entry, there is a replicated observation (same *student_id*) with a negative income value. We obtain the following figure:
+
+```{r, echo=FALSE}
+  df <- df[df$income >= 0, ]
+
+  df %>% 
+   ggplot(aes(income)) + 
+   geom_histogram(alpha=0.75, color="grey", position = "identity", binwidth = 10000)
+```
+Since the way income buckets were determined is not specified in the dataset, we try to identify the boundaries of each income bucket ranging from 1 to 5. 
+
+```{r, echo=FALSE}
+aggregate(df$income, by = list(df$income_bucket), min)
+aggregate(df$income, by = list(df$income_bucket), max)
+```
+The maximum value of each income bucket shows the following:
+
+- Income bucket 1: [0-39,999]   
+- Income bucket 2: [40,000-59,999]    
+- Income bucket 3: [60,000-79,999]    
+- Income bucket 4: [80,000-99,999]    
+- Income bucket 5: >= 100,000   
+
+These results verify that income buckets are correctly classified with a minimum income of 4179.39 and a maximum income of 157637.56 (in dollars).
+
+### 2.3 Student IDs
+
+A simple look at the student identification numbers clearly shows that each unit of observation is replicated twice. We remove the replicated data and obtain 5000 unique observations. 
+
+```{r, echo=FALSE}
+df <- df[!duplicated(df$student_id), ]
+```
+
+### 2.4 Standardizing Catgorical Data
+
+#### 2.4.1 Athletics and sports membership:
+When examining the dataset, we can identify two categorical variables (i.e. race and gender) and a binary variable (i.e. athletics and sports membership) that need to be standardized in classification. For instance, the variable *plays_sports* includes both binary values (either 0 or 1) as well as categories (i.e. baseball, basketball, gymnastics, volleyball and tennis). Since it is highly unlikely that we need specific information on the sports played by students, in addition to the fact that we do not have further information on the sports played by students who have a value of 1, we then transform all column values identifying a certain sport to a standard value of 1.
+
+We obtain a total of 2975 students who do not play sports (*plays_sport* = 0) and 2025 of students who play a sport (*plays_sport* = 1).
+
+```{r, echo=FALSE, include=FALSE}
+df$plays_sports[df$plays_sports == 'baseball' | df$plays_sports == 'basketball' | df$plays_sports == 'gymnastics' | df$plays_sports == 'soccer' | df$plays_sports == 'tennis' | df$plays_sports == 'volleyball'] <- 1
+summary(df$plays_sports)
+summary(mydata$plays_sports)
+```
+
+#### 2.4.2 Gender:
+We have identified a similar problem with the categorical variable *gender* since some data entries use male/female while others use the abbreviated form M/F. We standardize all entries to the latter denomination.
+
+We obtain a total of 2540 students who identify as male (*gender* = M) and 2460 of students who identify as female (*gender* = F).
+
+```{r, echo=FALSE, include=FALSE}
+df$gender[df$gender == 'male'] <- "M"
+df$gender[df$gender == 'female'] <- "F"              
+summary(df$gender)
+```
+
+#### 2.4.3 Race:
+Lastly, we look at the categorical variable *race* and identify the same problem: the race of some units of observation are entered as hispanic/black while others are written as H/B. We use the latter as a standard categorical reference to race.
+
+We obtain a total of 3442 hispanic students (*race* = H), 797 black students (*race* = B), 651 white students (*race* = W) and 110 students from another race (*race* = A).
+
+```{r, echo=FALSE, include=FALSE}
+df$race[df$race == 'black'] <- "B"
+df$race[df$race == 'hispanic'] <- "H"              
+summary(df$race) 
+```
+
+### 2.5 Distance from school and geographical coordinates
+
+The dataset shows that a substantial number of entries for the variables *lat* and *long* (which respectively identify the latitude and longitude of the student's geo-location) is missing. This may be due to the fact that collecting precise and complete data on the exact location of a student's homebase is time-consuming and in most cases, unknown by the observed units in the quasi-experiment. In total, there are 4465 missing data entries for these two variables. However, we still have complete information on the student's distance from school. This can be a good substitute for the missing data on the geo-location. We drop the two columns *lat* and *long* from the dataset and keep the column *dist*.
+
+```{r, echo=FALSE, include=FALSE}
+summary(df$lat==0)
+summary(df$long==0)
+summary(df$dist==0)
+df <- subset(df, select = -c(lat, long))
+```
+
+More importantly, the column *dist* shows a similar problem we encountered with the column *score* whereby some data entries are out of scale. We then appropriately rescale the data.
+
+```{r, echo=FALSE, include=FALSE}
+df$dist <- if_else(df$dist>100, df$dist/1000, df$dist)
+```
+
+## Question 3
+Using the dataset after deleting, transforming, standardizing and rescaling observations, we re-estimate the average treatment effect using the same two methods in Question 1.
+
+The simple linear regression on the treatment effect of attending LLS and obtain 0.10195 (SD = 0.05903). The coefficient estimate is statistically significantly different from zero at 10% significance level with a t-statistic of 1.727 and a p-value of 0.0842. The following steps take the difference in the pre-treatment test scores to estimate ATE.
+
+```{r, echo=FALSE}
+df$treatment <- NULL
+df$treatment[df$lab==1] <- 1
+df$treatment[df$lab==0] <- 0
+
+treatment <- df$treatment
+reg10 <- lm(I(df$score) ~ treatment)
+names(reg10$coefficients) <- c('Intercept','Treatment')
+summary(reg10)
+```
+
+### Method 1: Using difference in means between treatment and control group
+
+We recalculate the pre-treatment average test scores (*past_score*) for the treatment (*lab* = 1) and control groups (*lab* = 0). We obtain test~pre,1~ = 7.683 for the treatment group and test~pre,0~ = 8.142 for the control group. The pre-treatment difference in average test scores diff~pre~ = test~pre,1~ - test~pre,0~ = -0.459. This is the same result we obtain previously, which makes sense since we have not altered this column.
+
+```{r, echo=FALSE}
+#Before treatment
+treat_before_mean = mean(df$past_score[df$lab==1])
+treat_before_mean
+
+control_before_mean = mean(df$past_score[df$lab==0])
+control_before_mean
+```
+
+We now recalculate the post-treatment average test scores (*score*) for the treatment (*lab* = 1) and control groups (*lab* = 0) after rescaling the data. We obtain test~post,1~ = 8.227 for the treatment group and test~post,0~ = 8.125 for the control group. The pre-treatment difference in average test scores diff~post~ = test~post,1~ - test~post,0~ = 0.101946.
+
+```{r, echo=FALSE}
+#After treatment
+treat_after_mean = mean(df$score[df$lab==1])
+treat_after_mean
+
+control_after_mean = mean(df$score[df$lab==0])
+control_after_mean
+```
+
+Finally, we estimate the average treatment effect by taking the difference-in-difference = diff~post~ - diff~pre~ = 0.5611292.
+
+```{r, echo=FALSE}
+diff_in_diff = (treat_after_mean-control_after_mean) - (treat_before_mean-control_before_mean)
+diff_in_diff
+```
+
+### Method 2: Using regression with indicator variable for treatment 
+
+We use the same indicator variable for treatment (*treatment*) to regress the difference in post-pre test scores for each observation on the treatment status. The output of the simple linear regression is consistent with the difference-in-differences result. The coefficient of the difference estimator is statistically significantly different from zero at 1% significance level with a t-statistic = 23.994 (SD = 0.02339).
+
+```{r, echo=FALSE}
+df$treatment <- NULL
+df$treatment[df$lab==1] <- 1
+df$treatment[df$lab==0] <- 0
+```
+
+```{r, echo=FALSE}
+diff_score <- df$score - df$past_score
+treatment <- df$treatment
+reg1 <- lm(I(diff_score) ~ treatment)
+names(reg1$coefficients) <- c('Intercept','Treatment')
+summary(reg1)
+```
+The average treatment effect remains positive yet is much smaller in magnitude (6.264 vs. 0.561). Moreover, there is a smaller variation in the estimated treatment effect (3.365 vs. 0.02339). The results after data cleaning seem to be more plausible and are more statistically significant than the original estimates. This increases our precision of treatment effect estimates as well as our statistical inferences. 
+
+## Question 4
+We now revisit our earlier concern about the randomization of the quasi-experiment, and specifically evaluating the balance between the treatment and control groups.
+
+### 4.1 Pre-treatment test scores
+We start by looking at the difference in academic ability between the treatment and control groups. We obtain the following distribution of *past_score*:
+
+```{r, echo=FALSE}
+df %>%
+  filter(!is.na(treatment)) %>% 
+  ggplot(aes(x = past_score)) +
+    geom_histogram(aes(color = as.factor(treatment), fill = as.factor(treatment)), alpha=0.4, position = "identity") +
+    scale_fill_manual("Treatment Status", values=c("#00AFBB", "#E7B800"), labels=c("Control group", "Treatment group"))+
+    scale_color_manual(values = c("#00AFBB", "#E7B800"), guide = FALSE) +
+    xlab("Pre-treatment Test Scores") +
+    ylab("Number of students")
+```
+
+The pre-treatment distribution looks symmetrical and centered around the mean for both the control and treatment groups. However, the mean value for the control group is higher (i.e. centered to the right) than the treatment group. Calculating the mean and median of *past_score*, we obtain an average of 8.142479 (median 8.127916) and 7.683296 (median 7.655454) for the control and treatment groups respectively. This is more visually observable in the following boxplots:
+
+```{r, echo=FALSE}
+df %>%
+  filter(!is.na(treatment)) %>% 
+  ggplot(aes(y = past_score)) +
+    geom_boxplot(aes(color = as.factor(treatment), fill = as.factor(treatment)), alpha=0.4) +
+    scale_fill_manual("Treatment Status", values=c("#00AFBB", "#E7B800"), labels=c("Control group", "Treatment group"))+
+    scale_color_manual(values = c("#00AFBB", "#E7B800"), guide = FALSE) +
+    xlab("Group") +
+    ylab("Pre-treatment Test Scores")
+```
+We want to test if the null hypothesis that the difference in pre-treatment test score is not significantly different from zero with a two-sample t-test. We reject the null hypothesis in favor of the alternative hypothesis that the true difference in means is not equal to zero (t-statistic = 10.383 and p-value = 2.2e-16).
+
+```{r, echo=FALSE}
+aggregate(df$past_score, list(df$treatment), FUN=mean)
+aggregate(df$past_score, list(df$treatment), FUN=median)
+test1 <- t.test(past_score ~ treatment, data = df)
+test1
+```
+
+### 4.2 Distance from school
+We now examine the balance in distance from school between the treatment and control groups. This is important since it determines the time it takes students to commute to/from the school establishment and access to its facilities. We obtain the following distribution of *dist*:
+
+```{r, echo=FALSE}
+df %>%
+  filter(!is.na(treatment)) %>% 
+  ggplot(aes(x = dist)) +
+    geom_histogram(aes(color = as.factor(treatment), fill = as.factor(treatment)), alpha=0.4, position = "identity") +
+    scale_fill_manual("Treatment Status", values=c("#00AFBB", "#E7B800"), labels=c("Control group", "Treatment group"))+
+    scale_color_manual(values = c("#00AFBB", "#E7B800"), guide = FALSE) +
+    xlab("Distance from school") +
+    ylab("Number of students")
+```
+
+At first glance, we can see that the distribution of distance from school for the control group is symmetrical and centered around a mean of 7.386326 (close to value of the median 7.270927) while the distribution of distance for the treatment group is right-skewed with more students living closer to the school. The mean value of *dist* for the treatment group is 6.178429 which is higher than the median of 5.941651. Running a two-sample t-test, we conclude that the difference in the average distance between the two groups is statistically different from zero with a t-statistic of 18.872 and a p-value of 2.2e-16.
+
+
+```{r, echo=FALSE}
+aggregate(df$dist, list(df$treatment), FUN=mean)
+aggregate(df$dist, list(df$treatment), FUN=median)
+test2 <- t.test(dist ~ treatment, data = df)
+test2
+```
+
+### 4.3 Income
+
+#### 4.3.1 Family income
+Looking at the student's economic background is crucial in determining any potential bias in the average treatment effect. In quasi-experiments, family income is likely to affect a number of observable and unobervable factors which, in turn, affect the student's academic ability and test performance. We obtain the following distribution of *income*:
+
+```{r, echo=FALSE}
+aggregate(df$income, list(df$treatment), FUN=mean)
+aggregate(df$income, list(df$treatment), FUN=median)
+df %>%
+  filter(!is.na(treatment)) %>% 
+  ggplot(aes(x = income, color = as.factor(treatment), fill = as.factor(treatment))) +
+    geom_histogram(alpha=0.4, position = "identity") +
+    scale_fill_manual("Treatment Status", values=c("#00AFBB", "#E7B800"), labels=c("Control group", "Treatment group"))+
+    scale_color_manual(values = c("#00AFBB", "#E7B800"), guide = FALSE) +
+    xlab("Family Income") +
+    ylab("Number of students")
+```
+
+The distribution of family income is comparatively similar for the treatment and control groups with slightly higher income for students in the control group (average \$76,261.08 and median \$75,745.14) vs. the treatment group (average \$71,368.96 and median \$71,202.09). The plot shows a right-skewed distribution for the students in the treatment group indicating outliers (i.e large income values). However, the distribution of income for the control group shows fatter right tails (higher kurtosis) than the treatment group indicating more students whose families earn more income per year. This is more discernible in the following boxplot:
+
+```{r, echo=FALSE}
+df %>%
+  filter(!is.na(treatment)) %>% 
+  ggplot(aes(y = income)) +
+    geom_boxplot(aes(color = as.factor(treatment), fill = as.factor(treatment)), alpha=0.4) +
+    scale_fill_manual("Treatment Status", values=c("#00AFBB", "#E7B800"), labels=c("Control group", "Treatment group"))+
+    scale_color_manual(values = c("#00AFBB", "#E7B800"), guide = FALSE) +
+    xlab("Group") +
+    ylab("Family Income")
+```
+
+Finally, we run a t-statistic to test whether the difference between the means is statistically significant. We reject the null hypothesis that the difference in means is equal to zero in favor of the alternative hypothesis that the difference in means is statistically significantly different from zero (t-statistic = 7.6877 and p-value = 2.095e-14). 
+
+```{r, echo=FALSE}
+aggregate(df$income, list(df$treatment), FUN=mean)
+aggregate(df$income, list(df$treatment), FUN=median)
+test3 <- t.test(income ~ treatment, data = df)
+test3
+```
+
+
+#### 4.3.2 Income Bucket
+In conjunction with our family income analysis, we look at the distribution of aggregated income buckets between the treatment and control groups. Our analysis confirms our previous observation that the control group has more students with higher family income and proportionally less students with lower family income.
+
+```{r, echo=FALSE}
+df %>%
+  filter(!is.na(treatment)) %>% 
+  ggplot(aes(x = income_bucket)) +
+    geom_bar(aes(color = as.factor(treatment), fill = as.factor(treatment)), alpha=0.4, position = "dodge") +
+    scale_fill_manual("Treatment Status", values=c("#00AFBB", "#E7B800"), labels=c("Control group", "Treatment group"))+
+    scale_color_manual(values = c("#00AFBB", "#E7B800"), guide = FALSE) +
+    xlab("Income Bucket") +
+    ylab("Number of students")
+```
+
+### 4.4 Gender
+Looking at the proportion of males (M) and females (F) between the treatment and control group, we can see that there is a balance as indicated in the below plot. More specifically, for both control and treatment groups there is a balance between females (49.2%) and males (50.8%). For each group separately,  the treatment groups has 49.6% females and 50.4% males. The control group comprises 49.2% females and 50.8% males. 
+
+```{r, echo=FALSE, fig.height=5}
+df %>%
+  filter(!is.na(treatment)) %>% 
+  ggplot(aes(x = gender, color = as.factor(treatment), fill = as.factor(treatment))) +
+    geom_bar(alpha=0.4, position = "dodge") +
+    scale_fill_manual("Treatment Status", values=c("#00AFBB", "#E7B800"), labels=c("Control group", "Treatment group"))+
+    scale_color_manual(values = c("#00AFBB", "#E7B800"), guide = FALSE) +
+    xlab("Gender") +
+    ylab("Number of students")
+```
+```{r, echo=FALSE}
+df %>% 
+  filter(treatment==1) %>% 
+  group_by(gender) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n) * 100)
+
+df %>% 
+  filter(treatment==0) %>% 
+  group_by(gender) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n) * 100)
+```
+
+### 4.5 Race
+In regard to *race*, we have four categories: Black (B), Hispanic (H), White (W) and Another Race (A). At first glance, we can see that both the control and treatment groups have proportionally more hispanic students (69.6% and 66.5% respectively). However, the treatment group has proportionally more black students (21.57%) than the control group (13.6%). Lastly, the control group has proportionally more white students (14.4%) than the treatment group (9.8%). The proportions of students identifying with another race is comparable in both groups and is relatively negligible (2.3% for control and 2.0% for treatment). The distribution of race by treatment status is summarized below:
+
+
+```{r, echo=FALSE}
+df %>%
+  filter(!is.na(treatment)) %>% 
+  ggplot(aes(x = race)) +
+    geom_bar(aes(color = as.factor(treatment), fill = as.factor(treatment)), alpha=0.4, position = "dodge") +
+    scale_fill_manual("Treatment Status", values=c("#00AFBB", "#E7B800"), labels=c("Control group", "Treatment group"))+
+    scale_color_manual(values = c("#00AFBB", "#E7B800"), guide = FALSE) +
+    xlab("Race") +
+    ylab("Number of students")
+```
+```{r, echo=FALSE}
+df %>% 
+  filter(race=="A") %>% 
+  group_by(treatment) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n) * 100)
+
+df %>% 
+  filter(race=="B") %>% 
+  group_by(treatment) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n) * 100)
+
+df %>% 
+  filter(race=="W") %>% 
+  group_by(treatment) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n) * 100)
+
+df %>% 
+  filter(race=="H") %>% 
+  group_by(treatment) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n) * 100)
+```
+
+### 4.6 Playing Sports
+As a final step, we look at the categorical variable *plays_sports* to see if there is balance between students who participate in athletic activities (e.g. basketball, baseball, tennis, etc.) and those who do not in the treatment vs. control groups. The results indicate that there is a comparable proportion of students involved in sports for the control (39.5%) and treatment group (41.9%). Conversely, the proportion of students who do not play sports is similar for the control (60.5%) and treatment group (58.1%).
+
+```{r, echo=FALSE}
+df %>%
+  filter(!is.na(treatment)) %>% 
+  ggplot(aes(x = plays_sports)) +
+    geom_bar(aes(color = as.factor(treatment), fill = as.factor(treatment)), alpha=0.4, position = "dodge") +
+    scale_fill_manual("Treatment Status", values=c("#00AFBB", "#E7B800"), labels=c("Control group", "Treatment group"))+
+    scale_color_manual(values = c("#00AFBB", "#E7B800"), guide = FALSE) +
+    xlab("Playing Sports") +
+    ylab("Number of students")
+```
+```{r, echo=FALSE}
+df %>% 
+  filter(treatment==1) %>% 
+  group_by(plays_sports) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n) * 100)
+
+df %>% 
+  filter(treatment==0) %>% 
+  group_by(plays_sports) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n) * 100)
+```
+
+### Conclusion
+The data analysis above demonstrates how the quasi-experiment may lead to a biased estimate of the average treatment effect ATE. Even though the treatment and control groups are balanced when we stratify the data by gender and participation in sports, we run into a selection bias based on the student's pre-treatment test scores, family income (and income bucket) as well as distance from school and ethnicity. In the context of a randomized controlled trial, the question of selecting balanced groups arises because each unit of observation (i.e. student) can either be treated or untreated. Thus, we need a reliable counter-factual for the unobserved state, i.e. when treatment units are untreated. The potential selection bias we encounter in the LLS experiment compromises the study's internal validity since treatment is correlated with some characteristics of students that also affect the outcome of interest (i.e. academic ability as measured by test scores).
+
+
+## Question 5
+Based on our analysis in the previous question, my hypothesis is that students who win the lottery (thus, attend the Levitt Laboratory Schools as part of the treatment group) are selected based distance between their home residence and the school. There is limited information on how the selection for admission from the lottery happened. I suspect that there are some rules and regulations within the school district that impose a certain quota of admitted students from the directly-surrounding community. For instance, the Chicago Public School (CPS) stratify the population in 4 socio-economic tiers based on where people live. Specifically, magnet schools admit students within a certain radius based on a lottery. The rest of the spots are given to students who live outside of the neighboring community yet still take into account their family's economic ability and educational background. Thus, students from the surrounding community have a higher chance of winning the lottery without being guaranteed admission.
+
+On a different note, this may explain the relatively lower mean family income for students in the treatment group. The surrounding community may be making less money and facing larger economic barriers. Moreover, the socio-economic tier can be related to the lower past test scores in the treatment group measuring the students' ability prior to joining the LLS. Multiple research studies investigate the effect of economic resources in the family and the community on the student's school performance.
+
+While keeping in mind the potential selection bias induced by the school system policies, we can still approximate an average treatment effect by running the original regression while controlling for the covariates causing potential bias. We will add the pre-treatment variables one-by-one to observe their effect on the estimated coefficient of interest as well as any potential omitted variable bias (OVB). The table summary showing the results can be found in the appendix (last page).
+
+```{r, echo=FALSE, results='asis', include=FALSE}
+reg.6 <- lm(I(df$score) ~ treatment)
+reg.7 <- lm(I(df$score) ~ treatment+dist, data = df)
+reg.8 <- lm(I(df$score) ~ treatment+dist+income, data = df)
+reg.9 <- lm(I(df$score) ~ treatment+dist+income+race+gender+plays_sports, data=df)
+stargazer(reg.6, reg.7, reg.8, reg.9, align=TRUE, type = 'latex', title="Treatment effect of attending the school on test scores")
+```
+
+The results show that the estimated coefficient of *treatment* increases from 0.1019 (SD=0.06) to 0.7862 (SD=0.05) when we control for *dist*. The coefficient marginally increases to 0.7577 (SD=0.047) when we control for *income* and to 0.7466 (SD=0.045) when we control for all other covariates. The coefficient estimate of interest is statistically significantly different from zero at 1% significance level. As hypothesized, distance between home residence and school is associated with treatment status as the coefficient of interest increased by larger magnitude when we controlled for the variable *dist*. We can then approximate the treatment effect of attending LLS to 0.7577 since controlling for *dist* and *income* reduces most of the variation in the coefficient of interest. Moreover, as we mentioned, there is potential omitted variable bias since the estimated coefficient of *dist* decreased from 0.5665 (SD=0.012) to 0.4214 (SD=0.012) when we add *income* as a control variable.
+
+## Question 6
+The previous analysis has revealed some important information about the community surrounding LLS. We now look more closely by filtering data within a 5-mile radius around the school using the *dist* variable. We obtain the following results that comparing the same parameters used beforehand while comparing students who live in the neighborgood vs. those who do not ^[I use the threshold of 5-mile radius based on our observation from the distribution of distance in Question 4.2] :
+
+```{r, echo=FALSE}
+df$neighborhood <- 1
+df$neighborhood[df$dist >= 5] <- 0
+````
+
+Consistent with our previous findings, the neighborhood has substantially lower average family income (\$60,981.21) than other geographic areas (\$77,340.51). Moreover, the pre-treatment standardized testing scores show a lower mean for students living in the surrounding neighborhood (6.611726	 vs. 8.258189 in other areas). It is interesting to see, however, that the neighborhood has proportionally more Black students and less White students. Note that I have disregarded other parameters such as *gender* and *plays_sports* since the results were comparatively insubstantially different between the two groups.
+
+
+```{r, echo=FALSE}
+mean1=aggregate(df$past_score, list(df$neighborhood), FUN=mean)
+mean1
+```
+
+```{r, echo=FALSE, fig.height=5}
+df %>%
+  ggplot(aes(x = past_score)) +
+    geom_histogram(aes(color = as.factor(neighborhood), fill = as.factor(neighborhood)), alpha=0.4, position = "identity") +
+    scale_fill_manual("Geographic location", values=c("#00AFBB", "#E7B800"), labels=c("Lives in the neighborhood", "Lives elsewhere"))+
+    geom_vline(aes(xintercept = mean(past_score), color = as.factor(treatment)), color="#00AFBB", size = 0.5, linetype="dashed") +
+    geom_vline(aes(xintercept = 6.611726), color = "#E7B800", size = 0.5, linetype="dashed") +
+    scale_color_manual(values = c("#00AFBB", "#E7B800"), guide = FALSE) +
+    xlab("Pre-treatment test scores") +
+    ylab("Number of students")
+```
+
+```{r, echo=FALSE}
+mean2=aggregate(df$income, list(df$neighborhood), FUN=mean)
+mean2
+```
+
+```{r, echo=FALSE}
+df %>%
+  ggplot(aes(x = income)) +
+    geom_histogram(aes(color = as.factor(neighborhood), fill = as.factor(neighborhood)), alpha=0.4, position = "identity") +
+    geom_vline(aes(xintercept = mean(income), color = as.factor(treatment)), color="#00AFBB", size = 0.5, linetype="dashed") +
+    geom_vline(aes(xintercept = 60981.21), color = "#E7B800", size = 0.5, linetype="dashed") +
+    scale_fill_manual("Geographic location", values=c("#00AFBB", "#E7B800"), labels=c("Lives in the neighborhood", "Lives elsewhere"))+
+    scale_color_manual(values = c("#00AFBB", "#E7B800"), guide = FALSE) +
+    xlab("Family Income") +
+    ylab("Number of students")
+```
+
+```{r, echo=FALSE}
+df %>%
+  ggplot(aes(x = race)) +
+    geom_bar(aes(color = as.factor(neighborhood), fill = as.factor(neighborhood)), alpha=0.4, position = "dodge") +
+    scale_fill_manual("Geographic location", values=c("#00AFBB", "#E7B800"), labels=c("Lives in the neighborhood", "Lives elsewhere"))+
+    scale_color_manual(values = c("#00AFBB", "#E7B800"), guide = FALSE) +
+    xlab("Race") +
+    ylab("Number of students")
+```
